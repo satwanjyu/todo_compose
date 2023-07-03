@@ -381,11 +381,9 @@ fun EditTaskScreen(
                 actions = {
                     IconButton(
                         onClick = {
-                            @Suppress("IfThenToElvis")
-                            val newTask = if (task != null) {
-                                task.copy(title = title, notes = notes)
-                            } else {
-                                Task(title = title, notes = notes, completed = false)
+                            val newTask = when {
+                                task != null -> task.copy(title = title, notes = notes)
+                                else -> Task(title = title, notes = notes, completed = false)
                             }
                             onConfirm(newTask)
                         }

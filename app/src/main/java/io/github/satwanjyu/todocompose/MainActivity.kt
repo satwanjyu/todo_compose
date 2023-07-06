@@ -1,5 +1,6 @@
 package io.github.satwanjyu.todocompose
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -45,31 +46,53 @@ import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.datasource.LoremIpsum
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.room.ColumnInfo
+import androidx.room.Dao
+import androidx.room.Database
+import androidx.room.Delete
+import androidx.room.Entity
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.PrimaryKey
+import androidx.room.Query
+import androidx.room.Room
+import androidx.room.RoomDatabase
 import io.github.satwanjyu.todocompose.ui.theme.TodoComposeTheme
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.mutate
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+var db: AppDataBase? = null
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (db == null) {
+            db = Room.databaseBuilder(applicationContext, AppDataBase::class.java, "tasks").build()
+        }
         setContent {
             val tasksViewModel: TasksViewModel = viewModel()
-            val tasks = tasksViewModel.taskList.collectAsState()
+            val tasks = tasksViewModel.tasks.collectAsState()
 
             TodoComposeTheme {
                 val navController = rememberNavController()
@@ -131,37 +154,36 @@ class MainActivity : ComponentActivity() {
 }
 
 class TasksViewModel : ViewModel() {
-    private val _taskList = MutableStateFlow<PersistentList<Task>>(persistentListOf())
-    val taskList: StateFlow<ImmutableList<Task>> get() = _taskList
+    private val dao: TasksDao = db!!.tasksDao()
+    val tasks: StateFlow<ImmutableList<Task>>
+        get() = dao.getAll().map { list ->
+            list.map { entity ->
+                Task(
+                    id = entity.uid,
+                    title = entity.title,
+                    notes = entity.notes,
+                    completed = entity.completed
+                )
+            }.toImmutableList()
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = persistentListOf()
+        )
 
     suspend fun addTask(task: Task) {
-        delay(500)
-        withContext(Dispatchers.Default) {
-            _taskList.value = _taskList.value.mutate { list ->
-                list.add(task.copy(id = _taskList.value.size))
-            }
-        }
+        val taskEntity = TaskEntity(task.id ?: 0, task.title, task.notes, task.completed)
+        dao.insert(taskEntity)
     }
 
     suspend fun editTask(task: Task) {
-        delay(500)
-        withContext(Dispatchers.Default) {
-            val index = _taskList.value.indexOfFirst { it.id == task.id }
-            if (index != -1) {
-                _taskList.value = _taskList.value.mutate { list ->
-                    list[index] = task
-                }
-            }
-        }
+        val taskEntity = TaskEntity(task.id!!, task.title, task.notes, task.completed)
+        dao.insert(taskEntity)
     }
 
     suspend fun removeTask(task: Task) {
-        delay(500)
-        withContext(Dispatchers.Default) {
-            _taskList.value = _taskList.value.mutate {  list ->
-                list.remove(task)
-            }
-        }
+        val taskEntity = TaskEntity(task.id!!, task.title, task.notes, task.completed)
+        dao.delete(taskEntity)
     }
 }
 
@@ -286,6 +308,31 @@ data class Task(
     val notes: String,
     val completed: Boolean,
 )
+
+@Entity
+data class TaskEntity(
+    @PrimaryKey(autoGenerate = true) val uid: Int,
+    @ColumnInfo(name = "title") val title: String,
+    @ColumnInfo(name = "notes") val notes: String,
+    @ColumnInfo(name = "completed") val completed: Boolean,
+)
+
+@Dao
+interface TasksDao {
+    @Query("SELECT * FROM taskentity")
+    fun getAll(): Flow<List<TaskEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(task: TaskEntity)
+
+    @Delete
+    suspend fun delete(task: TaskEntity)
+}
+
+@Database(entities = [TaskEntity::class], version = 1, exportSchema = false)
+abstract class AppDataBase : RoomDatabase() {
+    abstract fun tasksDao(): TasksDao
+}
 
 @Preview
 @Composable

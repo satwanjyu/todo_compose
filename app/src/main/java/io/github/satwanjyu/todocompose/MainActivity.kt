@@ -3,6 +3,10 @@ package io.github.satwanjyu.todocompose
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,7 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Card
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -22,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -37,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -70,10 +76,12 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -83,7 +91,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (db == null) {
-            db = Room.databaseBuilder(applicationContext, AppDataBase::class.java, "tasks").build()
+            db =
+                Room.databaseBuilder(
+                    context = applicationContext,
+                    klass = AppDataBase::class.java,
+                    name = "todo-compose-db"
+                )
+                    .build()
         }
         setContent {
             val tasksViewModel: TasksViewModel = viewModel()
@@ -108,12 +122,20 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onNewTaskClick = {
                                     navController.navigate("new-task")
+                                },
+                                selectedTasks = tasksViewModel.selectedTasks.collectAsState().value,
+                                onSelectedTasksChange = { list ->
+                                    tasksViewModel.selectedTasks.update { list.toPersistentList() }
+                                },
+                                onRemoveTasks = { list ->
+                                    tasksViewModel.apply {
+                                        removeTasks(list)
+                                        selectedTasks.update { persistentListOf() }
+                                    }
                                 }
                             )
                         }
-                        composable(
-                            "new-task",
-                        ) {
+                        composable("new-task") {
                             EditTaskScreen(
                                 onConfirm = { newTask ->
                                     tasksViewModel.addTask(newTask)
@@ -168,6 +190,8 @@ class TasksViewModel : ViewModel() {
             initialValue = persistentListOf()
         )
 
+    val selectedTasks = MutableStateFlow(persistentListOf<Task>())
+
     suspend fun addTask(task: Task) {
         val taskEntity = TaskEntity(task.id ?: 0, task.title, task.notes, task.completed)
         dao.insert(taskEntity)
@@ -178,49 +202,49 @@ class TasksViewModel : ViewModel() {
         dao.insert(taskEntity)
     }
 
-    suspend fun removeTask(task: Task) {
-        val taskEntity = TaskEntity(task.id!!, task.title, task.notes, task.completed)
-        dao.delete(taskEntity)
+    suspend fun removeTasks(tasks: List<Task>) {
+        val entities = tasks.map { TaskEntity(it.id!!, it.title, it.notes, it.completed) }
+        dao.deleteAll(*entities.toTypedArray())
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TaskItem(
     title: String,
     notes: String,
-    completed: Boolean,
-    onCompletedChange: (Boolean) -> Unit,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    containerColor: Color,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        content = {
-            ListItem(
-                headlineContent = {
-                    Text(
-                        title,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                modifier = modifier,
-                supportingContent = {
-                    Text(
-                        notes,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                leadingContent = {
-                    Checkbox(
-                        checked = completed,
-                        onCheckedChange = onCompletedChange
-                    )
-                },
+    ListItem(
+        headlineContent = {
+            Text(
+                title,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
         },
-        onClick = onClick,
+        modifier = modifier.combinedClickable(
+            onClick = onClick,
+            onLongClick = onLongClick,
+        ),
+        supportingContent = {
+            Text(
+                notes,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        leadingContent = {
+            Checkbox(checked, onCheckedChange)
+        },
+        colors = ListItemDefaults.colors(
+            containerColor = containerColor
+        )
     )
 }
 
@@ -239,12 +263,16 @@ fun TaskItemPreview(
         TaskItem(
             title = title,
             notes = notes,
-            completed = false,
-            onCompletedChange = {},
-            onClick = {}
+            checked = false,
+            onCheckedChange = {},
+            onClick = {},
+            onLongClick = {},
+            containerColor = Color.Transparent
         )
     }
 }
+
+enum class TaskListMode { Tick, Select }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -253,21 +281,75 @@ fun TaskListScreen(
     onTaskCompletionChange: suspend (task: Task) -> Unit,
     onNavigateToEditTask: (task: Task) -> Unit,
     onNewTaskClick: () -> Unit,
+    selectedTasks: ImmutableList<Task>,
+    onSelectedTasksChange: (tasks: ImmutableList<Task>) -> Unit,
+    onRemoveTasks: suspend (tasks: ImmutableList<Task>) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scope = rememberCoroutineScope()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val mode = if (selectedTasks.isEmpty()) TaskListMode.Tick else TaskListMode.Select
 
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
+            val topBarAnimationSpec = tween<Float>(durationMillis = 100)
             LargeTopAppBar(
                 title = {
-                    Text(
-                        stringResource(R.string.tasks),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Crossfade(
+                        mode,
+                        animationSpec = topBarAnimationSpec,
+                        label = "title cross-fade"
+                    ) { mode ->
+                        Text(
+                            when (mode) {
+                                TaskListMode.Tick -> stringResource(R.string.tasks)
+                                TaskListMode.Select -> stringResource(
+                                    R.string.task_selected,
+                                    selectedTasks.size
+                                )
+                            },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                },
+                navigationIcon = {
+                    Crossfade(
+                        mode,
+                        animationSpec = topBarAnimationSpec,
+                        label = "nav icon cross-fade"
+                    ) { mode ->
+                        when (mode) {
+                            TaskListMode.Tick -> {}
+                            TaskListMode.Select -> {
+                                IconButton(onClick = { onSelectedTasksChange(persistentListOf()) }) {
+                                    Icon(Icons.Default.Close, stringResource(R.string.dismiss))
+                                }
+                            }
+                        }
+                    }
+                },
+                actions = {
+                    Crossfade(
+                        mode,
+                        animationSpec = topBarAnimationSpec,
+                        label = "actions cross-fade"
+                    ) { mode ->
+                        when (mode) {
+                            TaskListMode.Tick -> {}
+                            TaskListMode.Select -> {
+                                IconButton(onClick = {
+                                    scope.launch(Dispatchers.IO) {
+                                        onRemoveTasks(selectedTasks)
+                                    }
+                                }) {
+                                    Icon(Icons.Default.Delete, stringResource(R.string.remove_tasks))
+                                }
+                            }
+                        }
+                    }
                 },
                 scrollBehavior = scrollBehavior
             )
@@ -284,20 +366,56 @@ fun TaskListScreen(
             modifier = Modifier
                 .padding(paddingValues)
         ) {
-            // TODO Supply key
             items(tasks, key = { it.id!! }) { task ->
+                val selected = selectedTasks.contains(task)
+                val setSelected = { newSelected: Boolean ->
+                    val result = if (newSelected) {
+                        selectedTasks.toPersistentList().add(task)
+                    } else {
+                        selectedTasks.toPersistentList().remove(task)
+                    }
+                    onSelectedTasksChange(result)
+                }
+
                 TaskItem(
                     title = task.title,
                     notes = task.notes,
-                    completed = task.completed,
-                    onCompletedChange = { completed ->
-                        scope.launch(Dispatchers.IO) {
-                            onTaskCompletionChange(task.copy(completed = completed))
+                    checked = when (mode) {
+                        TaskListMode.Tick -> task.completed
+                        TaskListMode.Select -> selected
+                    },
+                    onCheckedChange = { checked ->
+                        when (mode) {
+                            TaskListMode.Tick -> {
+                                scope.launch(Dispatchers.IO) {
+                                    onTaskCompletionChange(task.copy(completed = checked))
+                                }
+                            }
+
+                            TaskListMode.Select -> {
+                                setSelected(checked)
+                            }
                         }
                     },
                     onClick = {
-                        onNavigateToEditTask(task)
-                    }
+                        when (mode) {
+                            TaskListMode.Tick -> onNavigateToEditTask(task)
+                            TaskListMode.Select -> {
+                                setSelected(!selected)
+                            }
+                        }
+
+                    },
+                    onLongClick = {
+                        when (mode) {
+                            TaskListMode.Tick -> onSelectedTasksChange(persistentListOf(task))
+                            TaskListMode.Select -> setSelected(!selected)
+                        }
+                    },
+                    containerColor = when (mode) {
+                        TaskListMode.Tick -> Color.Transparent
+                        TaskListMode.Select -> MaterialTheme.colorScheme.primaryContainer
+                    },
                 )
             }
         }
@@ -328,7 +446,7 @@ interface TasksDao {
     suspend fun insert(task: TaskEntity)
 
     @Delete
-    suspend fun delete(task: TaskEntity)
+    suspend fun deleteAll(vararg tasks: TaskEntity)
 }
 
 @Database(entities = [TaskEntity::class], version = 1, exportSchema = false)
@@ -336,6 +454,7 @@ abstract class AppDataBase : RoomDatabase() {
     abstract fun tasksDao(): TasksDao
 }
 
+// TODO Save lazy list state
 @Preview
 @Composable
 fun TaskListScreenPreview(@PreviewParameter(LoremIpsum::class) lorem: String) {
@@ -370,11 +489,16 @@ fun TaskListScreenPreview(@PreviewParameter(LoremIpsum::class) lorem: String) {
             tasks = tasks,
             onTaskCompletionChange = {},
             onNavigateToEditTask = {},
-            onNewTaskClick = {})
+            onNewTaskClick = {},
+            selectedTasks = persistentListOf(),
+            onSelectedTasksChange = {},
+            onRemoveTasks = {},
+        )
     }
 }
 
 // TODO Expand transition
+// TODO Save text field state
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditTaskScreen(

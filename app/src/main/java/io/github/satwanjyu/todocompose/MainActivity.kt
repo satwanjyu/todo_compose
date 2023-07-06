@@ -1,6 +1,5 @@
 package io.github.satwanjyu.todocompose
 
-import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -66,15 +65,11 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import io.github.satwanjyu.todocompose.ui.theme.TodoComposeTheme
 import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.PersistentList
-import kotlinx.collections.immutable.mutate
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -105,7 +100,9 @@ class MainActivity : ComponentActivity() {
                         composable("task-list") {
                             TaskListScreen(
                                 tasks = tasks.value,
-                                onTasksChange = {},
+                                onTaskCompletionChange = { task ->
+                                    tasksViewModel.editTask(task)
+                                },
                                 onNavigateToEditTask = { task ->
                                     navController.navigate("edit-task?taskId=${task.id}")
                                 },
@@ -253,12 +250,13 @@ fun TaskItemPreview(
 @Composable
 fun TaskListScreen(
     tasks: ImmutableList<Task>,
-    onTasksChange: (tasks: ImmutableList<Task>) -> Unit,
+    onTaskCompletionChange: suspend (task: Task) -> Unit,
     onNavigateToEditTask: (task: Task) -> Unit,
     onNewTaskClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -292,7 +290,11 @@ fun TaskListScreen(
                     title = task.title,
                     notes = task.notes,
                     completed = task.completed,
-                    onCompletedChange = {},
+                    onCompletedChange = { completed ->
+                        scope.launch(Dispatchers.IO) {
+                            onTaskCompletionChange(task.copy(completed = completed))
+                        }
+                    },
                     onClick = {
                         onNavigateToEditTask(task)
                     }
@@ -366,7 +368,7 @@ fun TaskListScreenPreview(@PreviewParameter(LoremIpsum::class) lorem: String) {
 
         TaskListScreen(
             tasks = tasks,
-            onTasksChange = {},
+            onTaskCompletionChange = {},
             onNavigateToEditTask = {},
             onNewTaskClick = {})
     }

@@ -30,9 +30,11 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -42,6 +44,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.datasource.LoremIpsum
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -49,16 +53,23 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import io.github.satwanjyu.todocompose.ui.theme.TodoComposeTheme
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.mutate
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            // TODO Switch to remote/persistent repo
-            var tasks by remember { mutableStateOf(persistentListOf<Task>()) }
+            val tasksViewModel: TasksViewModel = viewModel()
+            val tasks = tasksViewModel.taskList.collectAsState()
 
             TodoComposeTheme {
                 val navController = rememberNavController()
@@ -68,49 +79,12 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     NavHost(navController, startDestination = "task-list") {
-                        composable("task-list") { entry ->
-                            val returnedId = entry.savedStateHandle.get<Int>("id")
-                            val returnedTitle = entry.savedStateHandle.get<String>("title")
-                            val returnedNotes = entry.savedStateHandle.get<String>("notes")
-                            val returnedCompleted = entry.savedStateHandle.get<Boolean>("completed")
-                            if (returnedTitle != null &&
-                                returnedNotes != null
-                            ) {
-                                if (returnedId == null) {
-                                    tasks = tasks.mutate { list ->
-                                        list.add(
-                                            Task(
-                                                list.size,
-                                                returnedTitle,
-                                                returnedNotes,
-                                                false,
-                                            )
-                                        )
-                                    }
-                                } else {
-                                    tasks = tasks.mutate { list ->
-                                        val index = list.indexOfFirst { it.id == returnedId }
-                                        list[index] = Task(
-                                            returnedId,
-                                            returnedTitle,
-                                            returnedNotes,
-                                            returnedCompleted!!,
-                                        )
-                                    }
-                                }
-                                entry.savedStateHandle.apply {
-                                    remove<Int>("id")
-                                    remove<String>("title")
-                                    remove<String>("notes")
-                                    remove<Boolean>("completed")
-                                }
-                            }
-
+                        composable("task-list") {
                             TaskListScreen(
-                                tasks = tasks,
+                                tasks = tasks.value,
                                 onTasksChange = {},
                                 onNavigateToEditTask = { task ->
-                                    navController.navigate("edit-task/${task.id}/${task.title}/${task.notes}/${task.completed}")
+                                    navController.navigate("edit-task?taskId=${task.id}")
                                 },
                                 onNewTaskClick = {
                                     navController.navigate("new-task")
@@ -122,51 +96,70 @@ class MainActivity : ComponentActivity() {
                         ) {
                             EditTaskScreen(
                                 onConfirm = { newTask ->
-                                    navController.previousBackStackEntry!!.savedStateHandle.apply {
-                                        set("title", newTask.title)
-                                        set("notes", newTask.notes)
-                                    }
-                                    navController.popBackStack()
+                                    tasksViewModel.addTask(newTask)
                                 },
-                                onDismiss = {
+                                onPop = {
                                     navController.popBackStack()
                                 }
                             )
                         }
+                        // TODO Avoid passing complex data via backstack arguments
                         composable(
-                            "edit-task/{id}/{title}/{notes}/{completed}",
+                            "edit-task?taskId={id}",
                             arguments = listOf(
                                 navArgument("id") { type = NavType.IntType },
-                                navArgument("title") { type = NavType.StringType },
-                                navArgument("notes") { type = NavType.StringType },
-                                navArgument("completed") { type = NavType.BoolType }
                             )
                         ) { entry ->
-                            val task = Task(
-                                id = entry.arguments!!.getInt("id"),
-                                title = entry.arguments!!.getString("title")!!,
-                                notes = entry.arguments!!.getString("notes")!!,
-                                completed = entry.arguments!!.getBoolean("completed"),
-                            )
+                            val id = entry.arguments!!.getInt("id")
+                            val task = tasks.value.first { it.id == id }
 
                             EditTaskScreen(
                                 task = task,
                                 onConfirm = { modifiedTask ->
-                                    navController.previousBackStackEntry!!.savedStateHandle.apply {
-                                        set("id", modifiedTask.id)
-                                        set("title", modifiedTask.title)
-                                        set("notes", modifiedTask.notes)
-                                        set("completed", modifiedTask.completed)
-                                    }
-                                    navController.popBackStack()
+                                    tasksViewModel.editTask(modifiedTask)
                                 },
-                                onDismiss = {
+                                onPop = {
                                     navController.popBackStack()
                                 }
                             )
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+class TasksViewModel : ViewModel() {
+    private val _taskList = MutableStateFlow<PersistentList<Task>>(persistentListOf())
+    val taskList: StateFlow<ImmutableList<Task>> get() = _taskList
+
+    suspend fun addTask(task: Task) {
+        delay(500)
+        withContext(Dispatchers.Default) {
+            _taskList.value = _taskList.value.mutate { list ->
+                list.add(task.copy(id = _taskList.value.size))
+            }
+        }
+    }
+
+    suspend fun editTask(task: Task) {
+        delay(500)
+        withContext(Dispatchers.Default) {
+            val index = _taskList.value.indexOfFirst { it.id == task.id }
+            if (index != -1) {
+                _taskList.value = _taskList.value.mutate { list ->
+                    list[index] = task
+                }
+            }
+        }
+    }
+
+    suspend fun removeTask(task: Task) {
+        delay(500)
+        withContext(Dispatchers.Default) {
+            _taskList.value = _taskList.value.mutate {  list ->
+                list.remove(task)
             }
         }
     }
@@ -272,18 +265,12 @@ fun TaskListScreen(
                 .padding(paddingValues)
         ) {
             // TODO Supply key
-            items(tasks) { task ->
+            items(tasks, key = { it.id!! }) { task ->
                 TaskItem(
                     title = task.title,
                     notes = task.notes,
                     completed = task.completed,
-                    onCompletedChange = {
-                        onTasksChange(tasks
-                            .toPersistentList()
-                            .mutate { list ->
-                                list[list.indexOf(task)] = task.copy(completed = !task.completed)
-                            })
-                    },
+                    onCompletedChange = {},
                     onClick = {
                         onNavigateToEditTask(task)
                     }
@@ -344,8 +331,8 @@ fun TaskListScreenPreview(@PreviewParameter(LoremIpsum::class) lorem: String) {
 fun EditTaskScreen(
     modifier: Modifier = Modifier,
     task: Task? = null,
-    onConfirm: (task: Task) -> Unit,
-    onDismiss: () -> Unit,
+    onConfirm: suspend (task: Task) -> Unit,
+    onPop: () -> Unit,
 ) {
     var title by remember { mutableStateOf(task?.title ?: "") }
     var notes by remember { mutableStateOf(task?.notes ?: "") }
@@ -357,7 +344,7 @@ fun EditTaskScreen(
             TopAppBar(
                 navigationIcon = {
                     IconButton(
-                        onClick = onDismiss
+                        onClick = onPop
                     ) {
                         Icon(
                             Icons.Default.Close,
@@ -379,13 +366,21 @@ fun EditTaskScreen(
                     )
                 },
                 actions = {
+                    val scope = rememberCoroutineScope()
                     IconButton(
                         onClick = {
                             val newTask = when {
                                 task != null -> task.copy(title = title, notes = notes)
                                 else -> Task(title = title, notes = notes, completed = false)
                             }
-                            onConfirm(newTask)
+                            scope.launch {
+                                withContext(Dispatchers.IO) {
+                                    onConfirm(newTask)
+                                }
+                                withContext(Dispatchers.Main) {
+                                    onPop()
+                                }
+                            }
                         }
                     ) {
                         Icon(
@@ -439,6 +434,6 @@ fun EditTaskScreenPreview(@PreviewParameter(LoremIpsum::class) lorem: String) {
     val notes = words.subList(5, 10).joinToString(" ")
 
     TodoComposeTheme {
-        EditTaskScreen(task = Task(0, title, notes, false), onConfirm = { }, onDismiss = { })
+        EditTaskScreen(task = Task(0, title, notes, false), onConfirm = { }, onPop = { })
     }
 }

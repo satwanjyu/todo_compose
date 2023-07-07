@@ -7,12 +7,12 @@ plugins {
 
 android {
     namespace = "io.github.satwanjyu.todocompose"
-    compileSdk = 33
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "io.github.satwanjyu.todocompose"
         minSdk = 33
-        targetSdk = 33
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 

@@ -343,7 +343,11 @@ fun TaskListScaffold(
                     },
                     containerColor = when (mode) {
                         is TaskListMode.Tick -> Color.Transparent
-                        is TaskListMode.Select -> MaterialTheme.colorScheme.primaryContainer
+                        is TaskListMode.Select -> if (selected(mode)) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            Color.Transparent
+                        }
                     },
                 )
             }

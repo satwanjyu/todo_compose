@@ -1,7 +1,14 @@
 package io.github.satwanjyu.todocompose.tasks
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -38,14 +46,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.datasource.LoremIpsum
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraphBuilder
@@ -96,9 +109,11 @@ fun NavGraphBuilder.tasksScreen(
     }
 }
 
+// TODO Encapsulate TaskItem UI behaviour
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TaskItem(
+    modifier: Modifier = Modifier,
     title: String,
     notes: String,
     checked: Boolean,
@@ -106,7 +121,7 @@ fun TaskItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     containerColor: Color,
-    modifier: Modifier = Modifier
+    textStyle: TextStyle,
 ) {
     ListItem(
         headlineContent = {
@@ -114,6 +129,7 @@ fun TaskItem(
                 title,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+                style = textStyle,
             )
         },
         modifier = modifier.combinedClickable(
@@ -155,7 +171,36 @@ fun TaskItemPreview(
             onCheckedChange = {},
             onClick = {},
             onLongClick = {},
-            containerColor = Color.Transparent
+            containerColor = Color.Transparent,
+            textStyle = LocalTextStyle.current
+        )
+    }
+}
+
+@Preview
+@Composable
+fun TaskItemPreviewTicked(
+    @PreviewParameter(provider = LoremIpsum::class) lorem: String,
+) {
+    val words = lorem
+        .replace(Regex("[^A-Za-z ]"), "")
+        .split(" ")
+    val title = words.subList(0, 5).joinToString(" ")
+    val notes = words.subList(5, 10).joinToString(" ")
+
+    TodoComposeTheme {
+        TaskItem(
+            title = title,
+            notes = notes,
+            checked = true,
+            onCheckedChange = {},
+            onClick = {},
+            onLongClick = {},
+            containerColor = Color.Transparent,
+            textStyle = LocalTextStyle.current.copy(
+                textDecoration = TextDecoration.LineThrough,
+                color = MaterialTheme.colorScheme.surfaceVariant
+            )
         )
     }
 }
@@ -216,12 +261,15 @@ fun TaskListScaffold(
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            val topBarAnimationSpec = tween<Float>(durationMillis = 100)
+            // TODO Refer to Material Motion
+            val tweenFloat = tween<Float>(100)
+            val tweenIntSize = tween<IntSize>(100)
+            val tweenIntOffset = tween<IntOffset>(100)
             LargeTopAppBar(
                 title = {
                     Crossfade(
                         mode,
-                        animationSpec = topBarAnimationSpec,
+                        animationSpec = tweenFloat,
                         label = "title crossfade"
                     ) { mode ->
                         Text(
@@ -238,41 +286,57 @@ fun TaskListScaffold(
                     }
                 },
                 navigationIcon = {
-                    Crossfade(
-                        mode,
-                        animationSpec = topBarAnimationSpec,
-                        label = "nav icon crossfade"
-                    ) { mode ->
-                        when (mode) {
-                            is TaskListMode.Tick -> {}
-                            is TaskListMode.Select -> {
-                                IconButton(onClick = { mode.onSelectedTasksChange(emptyList()) }) {
-                                    Icon(Icons.Default.Close, stringResource(R.string.dismiss))
-                                }
+                    val visible = when (mode) {
+                        is TaskListMode.Tick -> false
+                        is TaskListMode.Select -> true
+                    }
+                    AnimatedVisibility(
+                        visible,
+                        enter = slideInHorizontally(tweenIntOffset) { -it / 2 } +
+                                expandHorizontally(tweenIntSize, Alignment.Start) +
+                                fadeIn(tweenFloat),
+                        exit = slideOutHorizontally(tweenIntOffset) { -it / 2 } +
+                                shrinkHorizontally(tweenIntSize, Alignment.Start) +
+                                fadeOut(tweenFloat),
+                    ) {
+                        IconButton(onClick = {
+                            when (mode) {
+                                is TaskListMode.Tick -> {}
+                                is TaskListMode.Select -> mode.onSelectedTasksChange(emptyList())
                             }
+                        }) {
+                            Icon(Icons.Default.Close, stringResource(R.string.dismiss))
                         }
                     }
                 },
                 actions = {
-                    Crossfade(
-                        mode,
-                        animationSpec = topBarAnimationSpec,
-                        label = "actions crossfade"
-                    ) { mode ->
-                        when (mode) {
-                            is TaskListMode.Tick -> {}
-                            is TaskListMode.Select -> {
-                                IconButton(onClick = {
+                    val visible = when (mode) {
+                        is TaskListMode.Tick -> false
+                        is TaskListMode.Select -> true
+                    }
+                    AnimatedVisibility(
+                        visible,
+                        enter = slideInHorizontally(tweenIntOffset) { it / 2 } +
+                                expandHorizontally(tweenIntSize, Alignment.End) +
+                                fadeIn(tweenFloat),
+                        exit = slideOutHorizontally(tweenIntOffset) { it / 2 } +
+                                shrinkHorizontally(tweenIntSize, Alignment.End) +
+                                fadeOut(tweenFloat),
+                    ) {
+                        IconButton(onClick = {
+                            when (mode) {
+                                is TaskListMode.Tick -> {}
+                                is TaskListMode.Select -> {
                                     scope.launch(Dispatchers.IO) {
                                         mode.onRemoveTasks(mode.selectedTasks)
                                     }
-                                }) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        stringResource(R.string.remove_tasks)
-                                    )
                                 }
                             }
+                        }) {
+                            Icon(
+                                Icons.Default.Delete,
+                                stringResource(R.string.remove_tasks)
+                            )
                         }
                     }
                 },
@@ -347,6 +411,24 @@ fun TaskListScaffold(
                             MaterialTheme.colorScheme.primaryContainer
                         } else {
                             Color.Transparent
+                        }
+                    },
+                    textStyle = when (mode) {
+                        is TaskListMode.Tick -> if (task.completed) {
+                            LocalTextStyle.current.copy(
+                                textDecoration = TextDecoration.LineThrough,
+                                color = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        } else {
+                            LocalTextStyle.current
+                        }
+
+                        is TaskListMode.Select -> if (selected(mode)) {
+                            LocalTextStyle.current.copy(
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        } else {
+                            LocalTextStyle.current
                         }
                     },
                 )

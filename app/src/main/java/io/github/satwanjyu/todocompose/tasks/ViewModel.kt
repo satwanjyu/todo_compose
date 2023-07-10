@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
-class TasksViewModel : ViewModel() {
+internal class TasksViewModel : ViewModel() {
     private val dao: TasksDao = db!!.tasksDao()
     val tasks: StateFlow<ImmutableList<Task>> = dao.getAll().map { list ->
         list.map(TaskEntity::toTask).toImmutableList()

@@ -112,7 +112,7 @@ fun NavGraphBuilder.tasksScreen(
 // TODO Encapsulate TaskItem UI behaviour
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun TaskItem(
+private fun TaskItem(
     modifier: Modifier = Modifier,
     title: String,
     notes: String,
@@ -154,7 +154,7 @@ fun TaskItem(
 
 @Preview
 @Composable
-fun TaskItemPreview(
+private fun TaskItemPreview(
     @PreviewParameter(provider = LoremIpsum::class) lorem: String,
 ) {
     val words = lorem
@@ -179,7 +179,7 @@ fun TaskItemPreview(
 
 @Preview
 @Composable
-fun TaskItemPreviewTicked(
+private fun TaskItemPreviewTicked(
     @PreviewParameter(provider = LoremIpsum::class) lorem: String,
 ) {
     val words = lorem
@@ -205,7 +205,7 @@ fun TaskItemPreviewTicked(
     }
 }
 
-sealed class TaskListMode {
+private sealed class TaskListMode {
     data class Tick(
         val onTaskChange: suspend (Task) -> Unit,
         val onNavigateToEditTask: (Task) -> Unit,
@@ -220,7 +220,7 @@ sealed class TaskListMode {
 }
 
 @Composable
-fun TaskListScreen(
+private fun TaskListScreen(
     viewModel: TasksViewModel = viewModel(),
     onNavigateToNewTask: () -> Unit,
     onNavigateToEditTask: (task: Task) -> Unit,
@@ -249,7 +249,7 @@ fun TaskListScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TaskListScaffold(
+private fun TaskListScaffold(
     modifier: Modifier = Modifier,
     mode: TaskListMode,
     tasks: ImmutableList<Task>,
@@ -439,7 +439,7 @@ fun TaskListScaffold(
 
 @Preview
 @Composable
-fun TaskListScaffoldPreview(@PreviewParameter(LoremIpsum::class) lorem: String) {
+private fun TaskListScaffoldPreview(@PreviewParameter(LoremIpsum::class) lorem: String) {
     val words = lorem
         .replace(Regex("[^A-Za-z ]"), "")
         .split(" ")
@@ -479,14 +479,14 @@ fun TaskListScaffoldPreview(@PreviewParameter(LoremIpsum::class) lorem: String) 
     }
 }
 
-sealed class EditTaskScreenMode {
+private sealed class EditTaskScreenMode {
     object NewTask : EditTaskScreenMode()
     data class EditTask(val taskId: Int) : EditTaskScreenMode()
 }
 
 // TODO Expand transition
 @Composable
-fun EditTaskScreen(
+private fun EditTaskScreen(
     viewModel: TasksViewModel = viewModel(),
     mode: EditTaskScreenMode,
     onPop: () -> Unit,
@@ -503,7 +503,7 @@ fun EditTaskScreen(
     )
 }
 
-sealed class EditTaskMode {
+private sealed class EditTaskMode {
     data class NewTask(
         val addTask: suspend (title: String, notes: String) -> Unit,
     ) : EditTaskMode()
@@ -516,7 +516,7 @@ sealed class EditTaskMode {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EditTaskScaffold(
+private fun EditTaskScaffold(
     modifier: Modifier = Modifier,
     mode: EditTaskMode,
     onPop: () -> Unit,
@@ -633,7 +633,7 @@ fun EditTaskScaffold(
 
 @Preview
 @Composable
-fun EditTaskScaffoldPreview(@PreviewParameter(LoremIpsum::class) lorem: String) {
+private fun EditTaskScaffoldPreview(@PreviewParameter(LoremIpsum::class) lorem: String) {
     val words = lorem
         .replace(Regex("[^A-Za-z ]"), "")
         .split(" ")

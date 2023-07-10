@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.satwanjyu.todocompose.db
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -22,7 +23,7 @@ internal class TasksViewModel : ViewModel() {
         initialValue = persistentListOf()
     )
 
-    val selectedTasks = MutableStateFlow(persistentListOf<Task>())
+    val selectedTasks = MutableStateFlow(persistentSetOf<Task>())
 
     suspend fun getTask(id: Int): Task {
         return dao.get(id).toTask()
@@ -41,7 +42,7 @@ internal class TasksViewModel : ViewModel() {
         dao.insert(taskEntity)
     }
 
-    suspend fun removeTasks(tasks: List<Task>) {
+    suspend fun removeTasks(tasks: Set<Task>) {
         val entities = tasks.map { TaskEntity(it.id, it.title, it.notes, it.completed) }
         dao.deleteAll(*entities.toTypedArray())
     }

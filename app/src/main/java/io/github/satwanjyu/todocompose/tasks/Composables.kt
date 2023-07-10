@@ -48,10 +48,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -68,10 +66,12 @@ import androidx.navigation.navArgument
 import io.github.satwanjyu.todocompose.R
 import io.github.satwanjyu.todocompose.ui.theme.TodoComposeTheme
 import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.ImmutableSet
+import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toPersistentList
+import kotlinx.collections.immutable.toPersistentSet
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -109,19 +109,19 @@ fun NavGraphBuilder.tasksScreen(
     }
 }
 
-// TODO Encapsulate TaskItem UI behaviour
+enum class TaskItemMode { Tick, Select }
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TaskItem(
     modifier: Modifier = Modifier,
     title: String,
     notes: String,
+    mode: TaskItemMode,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     onClick: () -> Unit,
-    onLongClick: () -> Unit,
-    containerColor: Color,
-    textStyle: TextStyle,
+    onLongClick: () -> Unit
 ) {
     ListItem(
         headlineContent = {
@@ -129,7 +129,14 @@ private fun TaskItem(
                 title,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                style = textStyle,
+                style = when {
+                    mode == TaskItemMode.Tick && checked -> LocalTextStyle.current.copy(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        textDecoration = TextDecoration.LineThrough,
+                    )
+
+                    else -> LocalTextStyle.current
+                },
             )
         },
         modifier = modifier.combinedClickable(
@@ -146,9 +153,13 @@ private fun TaskItem(
         leadingContent = {
             Checkbox(checked, onCheckedChange)
         },
-        colors = ListItemDefaults.colors(
-            containerColor = containerColor
-        )
+        colors = when {
+            mode == TaskItemMode.Select && checked -> ListItemDefaults.colors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            )
+
+            else -> ListItemDefaults.colors()
+        }
     )
 }
 
@@ -167,12 +178,11 @@ private fun TaskItemPreview(
         TaskItem(
             title = title,
             notes = notes,
+            mode = TaskItemMode.Tick,
             checked = false,
             onCheckedChange = {},
             onClick = {},
             onLongClick = {},
-            containerColor = Color.Transparent,
-            textStyle = LocalTextStyle.current
         )
     }
 }
@@ -193,14 +203,10 @@ private fun TaskItemPreviewTicked(
             title = title,
             notes = notes,
             checked = true,
+            mode = TaskItemMode.Tick,
             onCheckedChange = {},
             onClick = {},
             onLongClick = {},
-            containerColor = Color.Transparent,
-            textStyle = LocalTextStyle.current.copy(
-                textDecoration = TextDecoration.LineThrough,
-                color = MaterialTheme.colorScheme.surfaceVariant
-            )
         )
     }
 }
@@ -213,9 +219,9 @@ private sealed class TaskListMode {
     ) : TaskListMode()
 
     data class Select(
-        val selectedTasks: ImmutableList<Task>,
-        val onSelectedTasksChange: (List<Task>) -> Unit,
-        val onRemoveTasks: suspend (List<Task>) -> Unit,
+        val selectedTasks: ImmutableSet<Task>,
+        val onSelectedTasksChange: (Set<Task>) -> Unit,
+        val onRemoveTasks: suspend (Set<Task>) -> Unit,
     ) : TaskListMode()
 }
 
@@ -233,12 +239,14 @@ private fun TaskListScreen(
             TaskListMode.Tick(
                 onTaskChange = { viewModel.editTask(it) },
                 onNavigateToEditTask = { onNavigateToEditTask(it) },
-                onSelectTask = { task -> viewModel.selectedTasks.update { persistentListOf(task) } }
+                onSelectTask = { task -> viewModel.selectedTasks.value = persistentSetOf(task) }
             )
         } else {
             TaskListMode.Select(
                 selectedTasks = selectedTasks,
-                onSelectedTasksChange = { list -> viewModel.selectedTasks.update { list.toPersistentList() } },
+                onSelectedTasksChange = {
+                    viewModel.selectedTasks.value = it.toPersistentSet()
+                },
                 onRemoveTasks = { viewModel.removeTasks(it) }
             )
         },
@@ -302,7 +310,7 @@ private fun TaskListScaffold(
                         IconButton(onClick = {
                             when (mode) {
                                 is TaskListMode.Tick -> {}
-                                is TaskListMode.Select -> mode.onSelectedTasksChange(emptyList())
+                                is TaskListMode.Select -> mode.onSelectedTasksChange(emptySet())
                             }
                         }) {
                             Icon(Icons.Default.Close, stringResource(R.string.dismiss))
@@ -354,85 +362,86 @@ private fun TaskListScaffold(
             }
         }
     ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .padding(paddingValues)
-        ) {
-            items(tasks, key = { it.id }) { task ->
-                // TODO Ugly as fuck closures
-                val selected = { mode: TaskListMode.Select ->
-                    mode.selectedTasks.contains(task)
-                }
-                val setSelected = { mode: TaskListMode.Select, newSelected: Boolean ->
-                    with(mode) {
-                        val result = if (newSelected) {
-                            selectedTasks.toPersistentList().add(task)
-                        } else {
-                            selectedTasks.toPersistentList().remove(task)
+        TaskList(
+            modifier = Modifier.padding(paddingValues),
+            tasks = tasks,
+            mode = mode,
+            scope = scope,
+        )
+    }
+}
+
+@Composable
+private fun TaskList(
+    modifier: Modifier = Modifier,
+    tasks: ImmutableList<Task>,
+    mode: TaskListMode,
+    scope: CoroutineScope,
+) {
+    LazyColumn(
+        modifier = modifier,
+    ) {
+        items(tasks, key = { it.id }) { task ->
+            TaskItem(
+                title = task.title,
+                notes = task.notes,
+                checked = when (mode) {
+                    is TaskListMode.Tick -> task.completed
+                    is TaskListMode.Select -> mode.selectedTasks.contains(task)
+                },
+                onCheckedChange = { checked ->
+                    when (mode) {
+                        is TaskListMode.Tick -> scope.launch(Dispatchers.IO) {
+                            mode.onTaskChange(task.copy(completed = checked))
                         }
-                        onSelectedTasksChange(result)
+
+                        is TaskListMode.Select -> {
+                            val selectedTasks = mode.selectedTasks.toMutableSet()
+                            when {
+                                checked -> selectedTasks.add(task)
+                                !checked -> selectedTasks.remove(task)
+                            }
+                            mode.onSelectedTasksChange(selectedTasks)
+                        }
                     }
+                },
+                onClick = {
+                    when (mode) {
+                        is TaskListMode.Tick -> mode.onNavigateToEditTask(task)
+                        is TaskListMode.Select -> {
+                            val selected = mode.selectedTasks.contains(task)
+                            val selectedTasks = mode.selectedTasks.toMutableSet()
+                            // Flip selected
+                            when {
+                                selected -> selectedTasks.remove(task)
+                                !selected -> selectedTasks.add(task)
+                            }
+                            mode.onSelectedTasksChange(selectedTasks)
+                        }
+                    }
+                },
+                onLongClick = {
+                    when (mode) {
+                        is TaskListMode.Tick -> scope.launch(Dispatchers.IO) {
+                            mode.onSelectTask(task)
+                        }
+
+                        is TaskListMode.Select -> {
+                            val selected = mode.selectedTasks.contains(task)
+                            val selectedTasks = mode.selectedTasks.toMutableSet()
+                            when {
+                                selected -> selectedTasks.remove(task)
+                                !selected -> selectedTasks.add(task)
+                            }
+                            mode.onSelectedTasksChange(selectedTasks)
+                        }
+                    }
+                },
+                mode = when (mode) {
+                    is TaskListMode.Tick -> TaskItemMode.Tick
+                    is TaskListMode.Select -> TaskItemMode.Select
                 }
-
-                TaskItem(
-                    title = task.title,
-                    notes = task.notes,
-                    checked = when (mode) {
-                        is TaskListMode.Tick -> task.completed
-                        is TaskListMode.Select -> selected(mode)
-                    },
-                    onCheckedChange = { checked ->
-                        when (mode) {
-                            is TaskListMode.Tick -> scope.launch(Dispatchers.IO) {
-                                mode.onTaskChange(task.copy(completed = checked))
-                            }
-
-                            is TaskListMode.Select -> setSelected(mode, checked)
-                        }
-                    },
-                    onClick = {
-                        when (mode) {
-                            is TaskListMode.Tick -> mode.onNavigateToEditTask(task)
-                            is TaskListMode.Select -> setSelected(mode, !selected(mode))
-                        }
-                    },
-                    onLongClick = {
-                        when (mode) {
-                            is TaskListMode.Tick -> scope.launch(Dispatchers.IO) {
-                                mode.onSelectTask(task)
-                            }
-
-                            is TaskListMode.Select -> setSelected(mode, !selected(mode))
-                        }
-                    },
-                    containerColor = when (mode) {
-                        is TaskListMode.Tick -> Color.Transparent
-                        is TaskListMode.Select -> if (selected(mode)) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            Color.Transparent
-                        }
-                    },
-                    textStyle = when (mode) {
-                        is TaskListMode.Tick -> if (task.completed) {
-                            LocalTextStyle.current.copy(
-                                textDecoration = TextDecoration.LineThrough,
-                                color = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        } else {
-                            LocalTextStyle.current
-                        }
-
-                        is TaskListMode.Select -> if (selected(mode)) {
-                            LocalTextStyle.current.copy(
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        } else {
-                            LocalTextStyle.current
-                        }
-                    },
-                )
-            }
+            )
         }
     }
 }

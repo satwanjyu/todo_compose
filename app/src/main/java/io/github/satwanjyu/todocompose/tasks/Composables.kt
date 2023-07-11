@@ -4,13 +4,17 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -73,9 +77,6 @@ import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.collections.immutable.toPersistentList
 
 
-/**
- * Subgraph for [WindowWidthSizeClass.Compact]
- */
 fun NavGraphBuilder.tasks(
     windowWidthSizeClass: WindowWidthSizeClass,
 ) {
@@ -88,16 +89,29 @@ fun NavGraphBuilder.tasks(
     }
 }
 
+private fun uiStateType(uiState: UiState) = when (uiState) {
+    is UiState.Tick, is UiState.Select -> 0
+    is UiState.Create -> 1
+    is UiState.Edit -> 2
+}
+
 @Composable
 private fun TasksCompact(viewModel: TasksViewModel = viewModel()) {
-    // TODO When foldable closes, Compose restarts at WindowSizeClass-aware composable which ends
-    //  up here. If the user was editing a task, this screen should immediately display EditTaskScreen
-    //  and add TaskList to the back-stack.
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+    // Transition should be strictly TaskList-Edit
     AnimatedContent(
         targetState = uiState,
-        contentKey = { it::class },
+        transitionSpec = {
+            if (uiStateType(uiState) == 0) {
+                EnterTransition.None togetherWith ExitTransition.None
+            } else {
+                (fadeIn(animationSpec = tween(220, delayMillis = 90)) +
+                        scaleIn(initialScale = 0.92f, animationSpec = tween(220, delayMillis = 90)))
+                    .togetherWith(fadeOut(animationSpec = tween(90)))
+            }
+        },
+        contentKey = { uiStateType(it) },
         label = "crossfade"
     ) { state ->
         when (state) {
@@ -113,7 +127,10 @@ private fun TasksCompact(viewModel: TasksViewModel = viewModel()) {
                             UiState.Select(uiState.tasks, selectedTasks.toImmutableSet())
                     }
                 },
-                onRemoveTasks = viewModel::removeTasks,
+                onRemoveTasks = {
+                    viewModel.removeTasks(it)
+                    viewModel.uiState.value = UiState.Tick(uiState.tasks)
+                },
                 onNavigateToCreate = {
                     viewModel.uiState.value = UiState.Create(uiState.tasks, "", "")
                 },

@@ -6,7 +6,6 @@
     <string name="confirm">Confirm</string>
     <string name="notes">Notes</string>
     <string name="title">Title</string>
-    <string name="add_task">Add task</string>
     <string name="new_task">New task</string>
     <string name="task_selected">%d selected</string>
     <string name="remove_tasks">Remove tasks</string>

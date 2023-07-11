@@ -18,7 +18,6 @@ data class TaskEntity(
     @ColumnInfo(name = "completed") val completed: Boolean,
 ) {
     internal fun toTask() = Task(uid, title, notes, completed)
-
 }
 
 @Dao

@@ -99,7 +99,7 @@ private fun uiStateType(uiState: UiState) = when (uiState) {
 private fun TasksCompact(viewModel: TasksViewModel = viewModel()) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    // Transition should be strictly TaskList-Edit
+    // TODO Should be implemented as self-contained navigation
     AnimatedContent(
         targetState = uiState,
         transitionSpec = {
@@ -117,7 +117,7 @@ private fun TasksCompact(viewModel: TasksViewModel = viewModel()) {
         when (state) {
             is UiState.Tick, is UiState.Select -> TaskListScaffold(
                 uiState = state,
-                onTaskChange = viewModel::insertTask,
+                onEditTask = viewModel::insertTask,
                 onSelectedTasksChange = { selectedTasks ->
                     when {
                         selectedTasks.isEmpty() -> viewModel.uiState.value =
@@ -146,7 +146,7 @@ private fun TasksCompact(viewModel: TasksViewModel = viewModel()) {
                         viewModel.uiState.value =
                             UiState.Create(tasks = state.tasks, title = title, notes = notes)
                     },
-                    createTask = { title, notes -> viewModel.insertTask(title, notes) },
+                    onCreateTask = { title, notes -> viewModel.insertTask(title, notes) },
                     onEditTask = {},
                     onEditBufferChange = {},
                     onDismiss = { viewModel.uiState.value = UiState.Tick(state.tasks) }
@@ -157,7 +157,7 @@ private fun TasksCompact(viewModel: TasksViewModel = viewModel()) {
                 EditTaskScaffold(
                     mode = EditTaskMode.Edit(state.task),
                     onCreateBufferChange = { _, _ -> },
-                    createTask = { _, _ -> },
+                    onCreateTask = { _, _ -> },
                     onEditTask = { viewModel.insertTask(it) },
                     onEditBufferChange = { viewModel.uiState.value = state.copy(task = it) },
                     onDismiss = { viewModel.uiState.value = UiState.Tick(state.tasks) }
@@ -171,9 +171,10 @@ private fun TasksCompact(viewModel: TasksViewModel = viewModel()) {
 private fun TasksExpanded(viewModel: TasksViewModel = viewModel()) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+    // TODO Basically identical to TasksCompact, consider merging the two.
     TwoPaneTaskListScaffold(
         uiState = uiState,
-        onTaskBufferChange = { viewModel.uiState.value = UiState.Edit(uiState.tasks, it) },
+        onEditBufferChange = { viewModel.uiState.value = UiState.Edit(uiState.tasks, it) },
         onSelectedTasksChange = { selectedTasks ->
             when {
                 selectedTasks.isEmpty() -> viewModel.uiState.value =
@@ -316,7 +317,7 @@ private fun TaskItemPreviewTicked(
 private fun TaskListScaffold(
     modifier: Modifier = Modifier,
     uiState: UiState,
-    onTaskChange: (Task) -> Unit,
+    onEditTask: (Task) -> Unit,
     onSelectedTasksChange: (Set<Task>) -> Unit,
     onRemoveTasks: (Set<Task>) -> Unit,
     onNavigateToCreate: () -> Unit,
@@ -426,7 +427,7 @@ private fun TaskListScaffold(
                 is UiState.Select -> TaskListMode.Select(uiState.selectedTasks)
                 else -> TaskListMode.Tick
             },
-            onTaskChange = onTaskChange,
+            onTaskChange = onEditTask,
             onSelectedTasksChange = onSelectedTasksChange,
             onNavigateToEdit = onNavigateToEdit
         )
@@ -542,7 +543,7 @@ private fun TaskListScaffoldPreview(@PreviewParameter(LoremIpsum::class) lorem: 
 
         TaskListScaffold(
             uiState = UiState.Tick(tasks),
-            onTaskChange = {},
+            onEditTask = {},
             onSelectedTasksChange = {},
             onRemoveTasks = {},
             onNavigateToCreate = {},
@@ -568,7 +569,7 @@ private fun EditTaskScaffold(
     modifier: Modifier = Modifier,
     mode: EditTaskMode,
     onCreateBufferChange: (title: String, notes: String) -> Unit,
-    createTask: (title: String, notes: String) -> Unit,
+    onCreateTask: (title: String, notes: String) -> Unit,
     onEditTask: (Task) -> Unit,
     onEditBufferChange: (Task) -> Unit,
     onDismiss: () -> Unit,
@@ -605,7 +606,7 @@ private fun EditTaskScaffold(
                         onClick = {
                             when (mode) {
                                 is EditTaskMode.Create -> {
-                                    createTask(mode.title, mode.notes)
+                                    onCreateTask(mode.title, mode.notes)
                                 }
 
                                 is EditTaskMode.Edit -> {
@@ -704,7 +705,7 @@ private fun EditTaskScaffoldPreview(@PreviewParameter(LoremIpsum::class) lorem: 
         EditTaskScaffold(
             mode = EditTaskMode.Edit(Task(0, title, notes, false)),
             onCreateBufferChange = { _, _ -> },
-            createTask = { _, _ -> },
+            onCreateTask = { _, _ -> },
             onEditTask = {},
             onEditBufferChange = {},
             onDismiss = {}
@@ -721,7 +722,7 @@ private fun TwoPaneTaskListScaffold(
     onSelectedTasksChange: (Set<Task>) -> Unit,
     onNavigateToEdit: (Task) -> Unit,
     onCreateBufferChange: (title: String, notes: String) -> Unit,
-    onTaskBufferChange: (Task) -> Unit,
+    onEditBufferChange: (Task) -> Unit,
     onDismiss: () -> Unit,
     onRemoveTasks: (Set<Task>) -> Unit,
     onTaskCreate: (title: String, notes: String) -> Unit,
@@ -861,9 +862,9 @@ private fun TwoPaneTaskListScaffold(
                     is UiState.Edit -> {
                         EditTaskForm(
                             title = state.task.title,
-                            onTitleChange = { onTaskBufferChange(state.task.copy(title = it)) },
+                            onTitleChange = { onEditBufferChange(state.task.copy(title = it)) },
                             notes = state.task.notes,
-                            onNotesChange = { onTaskBufferChange(state.task.copy(notes = it)) }
+                            onNotesChange = { onEditBufferChange(state.task.copy(notes = it)) }
                         )
                     }
 
@@ -915,7 +916,7 @@ private fun TwoPaneTaskListScaffoldPreview(@PreviewParameter(LoremIpsum::class) 
             onSelectedTasksChange = {},
             onNavigateToEdit = {},
             onCreateBufferChange = { _, _ -> },
-            onTaskBufferChange = {},
+            onEditBufferChange = {},
             onDismiss = {},
             onRemoveTasks = {},
             onTaskCreate = { _, _ -> },

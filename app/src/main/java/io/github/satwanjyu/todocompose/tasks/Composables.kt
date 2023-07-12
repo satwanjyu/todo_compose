@@ -42,6 +42,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.PlainTooltipBox
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -407,13 +408,18 @@ private fun TaskListScaffold(
                                 shrinkHorizontally(tweenIntSize, Alignment.Start) +
                                 fadeOut(tweenFloat),
                     ) {
-                        IconButton(onClick = {
-                            when (uiState) {
-                                is UiState.Select -> onSelectedTasksChange(emptySet())
-                                else -> {}
+                        PlainTooltipBox(
+                            tooltip = { Text(stringResource(R.string.dismiss)) }) {
+                            IconButton(
+                                modifier = Modifier.tooltipAnchor(),
+                                onClick = {
+                                    when (uiState) {
+                                        is UiState.Select -> onSelectedTasksChange(emptySet())
+                                        else -> {}
+                                    }
+                                }) {
+                                Icon(Icons.Default.Close, stringResource(R.string.dismiss))
                             }
-                        }) {
-                            Icon(Icons.Default.Close, stringResource(R.string.dismiss))
                         }
                     }
                 },
@@ -430,33 +436,43 @@ private fun TaskListScaffold(
                                 shrinkHorizontally(tweenIntSize, Alignment.End) +
                                 fadeOut(tweenFloat),
                     ) {
-                        IconButton(onClick = {
-                            when (uiState) {
-                                is UiState.Select -> {
-                                    onRemoveTasks(uiState.selectedTasks)
-                                }
+                        PlainTooltipBox(
+                            tooltip = { Text(stringResource(R.string.remove_tasks)) }
+                        ) {
+                            IconButton(
+                                modifier = Modifier.tooltipAnchor(),
+                                onClick = {
+                                    when (uiState) {
+                                        is UiState.Select -> {
+                                            onRemoveTasks(uiState.selectedTasks)
+                                        }
 
-                                else -> {}
+                                        else -> {}
+                                    }
+                                }) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    stringResource(R.string.remove_tasks)
+                                )
                             }
-                        }) {
-                            Icon(
-                                Icons.Default.Delete,
-                                stringResource(R.string.remove_tasks)
-                            )
                         }
+
                     }
                 },
                 scrollBehavior = scrollBehavior
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = onNavigateToCreate,
-            ) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = stringResource(R.string.new_task)
-                )
+            PlainTooltipBox(tooltip = { Text(stringResource(R.string.new_task)) }) {
+                FloatingActionButton(
+                    modifier = Modifier.tooltipAnchor(),
+                    onClick = onNavigateToCreate,
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = stringResource(R.string.new_task)
+                    )
+                }
             }
         }
     ) { paddingValues ->
@@ -620,13 +636,16 @@ private fun EditTaskScaffold(
         topBar = {
             TopAppBar(
                 navigationIcon = {
-                    IconButton(
-                        onClick = onDismiss
-                    ) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = stringResource(R.string.dismiss)
-                        )
+                    PlainTooltipBox(tooltip = { Text(stringResource(R.string.dismiss)) }) {
+                        IconButton(
+                            modifier = Modifier.tooltipAnchor(),
+                            onClick = onDismiss
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = stringResource(R.string.dismiss)
+                            )
+                        }
                     }
                 },
                 title = {
@@ -642,24 +661,26 @@ private fun EditTaskScaffold(
                     )
                 },
                 actions = {
-                    IconButton(
-                        onClick = {
-                            when (mode) {
-                                is EditTaskMode.Create -> {
-                                    onCreateTask(mode.title, mode.notes)
-                                }
+                    PlainTooltipBox(tooltip = { Text(stringResource(R.string.confirm)) }) {
+                        IconButton(
+                            onClick = {
+                                when (mode) {
+                                    is EditTaskMode.Create -> {
+                                        onCreateTask(mode.title, mode.notes)
+                                    }
 
-                                is EditTaskMode.Edit -> {
-                                    onEditTask(mode.task)
+                                    is EditTaskMode.Edit -> {
+                                        onEditTask(mode.task)
+                                    }
                                 }
+                                onDismiss()
                             }
-                            onDismiss()
+                        ) {
+                            Icon(
+                                Icons.Default.Check,
+                                contentDescription = stringResource(R.string.confirm)
+                            )
                         }
-                    ) {
-                        Icon(
-                            Icons.Default.Check,
-                            contentDescription = stringResource(R.string.confirm)
-                        )
                     }
                 },
                 scrollBehavior = scrollBehavior,
@@ -790,10 +811,13 @@ private fun NavRailTwoPaneScaffold(
                                 shrinkHorizontally(tweenIntSize, Alignment.Start) +
                                 fadeOut(tweenFloat),
                     ) {
-                        IconButton(onClick = {
-                            onDismiss()
-                        }) {
-                            Icon(Icons.Default.Close, stringResource(R.string.dismiss))
+                        PlainTooltipBox(tooltip = { Text(stringResource(R.string.dismiss)) }) {
+                            IconButton(
+                                modifier = Modifier.tooltipAnchor(),
+                                onClick = onDismiss
+                            ) {
+                                Icon(Icons.Default.Close, stringResource(R.string.dismiss))
+                            }
                         }
                     }
                 },
@@ -811,19 +835,23 @@ private fun NavRailTwoPaneScaffold(
                                 shrinkHorizontally(tweenIntSize, Alignment.End) +
                                 fadeOut(tweenFloat),
                     ) {
-                        IconButton(onClick = {
-                            when (uiState) {
-                                is UiState.Select -> {
-                                    onRemoveTasks(uiState.selectedTasks)
-                                }
+                        PlainTooltipBox(tooltip = { Text(stringResource(R.string.remove_tasks)) }) {
+                            IconButton(
+                                modifier = Modifier.tooltipAnchor(),
+                                onClick = {
+                                    when (uiState) {
+                                        is UiState.Select -> {
+                                            onRemoveTasks(uiState.selectedTasks)
+                                        }
 
-                                else -> {}
+                                        else -> {}
+                                    }
+                                }) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    stringResource(R.string.remove_tasks)
+                                )
                             }
-                        }) {
-                            Icon(
-                                Icons.Default.Delete,
-                                stringResource(R.string.remove_tasks)
-                            )
                         }
                     }
                     // Confirm
@@ -834,22 +862,25 @@ private fun NavRailTwoPaneScaffold(
                             else -> false
                         }
                     ) {
-                        IconButton(
-                            onClick = {
-                                when (uiState) {
-                                    is UiState.Create -> {
-                                        onTaskCreate(uiState.title, uiState.notes)
-                                    }
+                        PlainTooltipBox(tooltip = { Text(stringResource(R.string.new_task)) }) {
+                            IconButton(
+                                modifier = Modifier.tooltipAnchor(),
+                                onClick = {
+                                    when (uiState) {
+                                        is UiState.Create -> {
+                                            onTaskCreate(uiState.title, uiState.notes)
+                                        }
 
-                                    is UiState.Edit -> {
-                                        onEditTask(uiState.task)
-                                    }
+                                        is UiState.Edit -> {
+                                            onEditTask(uiState.task)
+                                        }
 
-                                    else -> {}
+                                        else -> {}
+                                    }
                                 }
+                            ) {
+                                Icon(Icons.Default.Check, stringResource(R.string.new_task))
                             }
-                        ) {
-                            Icon(Icons.Default.Check, stringResource(R.string.new_task))
                         }
                     }
                 },
@@ -858,12 +889,16 @@ private fun NavRailTwoPaneScaffold(
     ) { paddingValues ->
         Row(modifier = Modifier.padding(paddingValues)) {
             NavigationRail(header = {
-                FloatingActionButton(
-                    onClick = {
-                        onNavigateToCreate()
+                PlainTooltipBox(tooltip = { Text(stringResource(R.string.new_task)) }) {
+                    FloatingActionButton(
+                        modifier = Modifier.tooltipAnchor(),
+                        onClick = onNavigateToCreate,
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = stringResource(R.string.new_task)
+                        )
                     }
-                ) {
-                    Icon(Icons.Default.Add, stringResource(R.string.new_task))
                 }
             }) {
                 // NavRail items
@@ -1021,10 +1056,14 @@ private fun NavRailScaffold(
                                 shrinkHorizontally(tweenIntSize, Alignment.Start) +
                                 fadeOut(tweenFloat),
                     ) {
-                        IconButton(onClick = {
-                            onDismiss()
-                        }) {
-                            Icon(Icons.Default.Close, stringResource(R.string.dismiss))
+                        PlainTooltipBox(tooltip = { Text(stringResource(R.string.dismiss)) }) {
+                            IconButton(
+                                modifier = Modifier.tooltipAnchor(),
+                                onClick = {
+                                    onDismiss()
+                                }) {
+                                Icon(Icons.Default.Close, stringResource(R.string.dismiss))
+                            }
                         }
                     }
                 },
@@ -1042,19 +1081,23 @@ private fun NavRailScaffold(
                                 shrinkHorizontally(tweenIntSize, Alignment.End) +
                                 fadeOut(tweenFloat),
                     ) {
-                        IconButton(onClick = {
-                            when (uiState) {
-                                is UiState.Select -> {
-                                    onRemoveTasks(uiState.selectedTasks)
-                                }
+                        PlainTooltipBox(tooltip = { Text(stringResource(R.string.remove_tasks)) }) {
+                            IconButton(
+                                modifier = Modifier.tooltipAnchor(),
+                                onClick = {
+                                    when (uiState) {
+                                        is UiState.Select -> {
+                                            onRemoveTasks(uiState.selectedTasks)
+                                        }
 
-                                else -> {}
+                                        else -> {}
+                                    }
+                                }) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    stringResource(R.string.remove_tasks)
+                                )
                             }
-                        }) {
-                            Icon(
-                                Icons.Default.Delete,
-                                stringResource(R.string.remove_tasks)
-                            )
                         }
                     }
                     // Confirm
@@ -1065,22 +1108,25 @@ private fun NavRailScaffold(
                             else -> false
                         }
                     ) {
-                        IconButton(
-                            onClick = {
-                                when (uiState) {
-                                    is UiState.Create -> {
-                                        onTaskCreate(uiState.title, uiState.notes)
-                                    }
+                        PlainTooltipBox(tooltip = { Text(stringResource(R.string.new_task)) }) {
+                            IconButton(
+                                modifier = Modifier.tooltipAnchor(),
+                                onClick = {
+                                    when (uiState) {
+                                        is UiState.Create -> {
+                                            onTaskCreate(uiState.title, uiState.notes)
+                                        }
 
-                                    is UiState.Edit -> {
-                                        onEditTask(uiState.task)
-                                    }
+                                        is UiState.Edit -> {
+                                            onEditTask(uiState.task)
+                                        }
 
-                                    else -> {}
+                                        else -> {}
+                                    }
                                 }
+                            ) {
+                                Icon(Icons.Default.Check, stringResource(R.string.new_task))
                             }
-                        ) {
-                            Icon(Icons.Default.Check, stringResource(R.string.new_task))
                         }
                     }
                 },
@@ -1091,12 +1137,16 @@ private fun NavRailScaffold(
             modifier = Modifier.padding(paddingValues),
         ) {
             NavigationRail(header = {
-                FloatingActionButton(
-                    onClick = {
-                        onNavigateToCreate()
+                PlainTooltipBox(tooltip = { Text(stringResource(R.string.new_task)) }) {
+                    FloatingActionButton(
+                        modifier = Modifier.tooltipAnchor(),
+                        onClick = onNavigateToCreate,
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = stringResource(R.string.new_task)
+                        )
                     }
-                ) {
-                    Icon(Icons.Default.Add, stringResource(R.string.new_task))
                 }
             }) {
                 // NavRail items

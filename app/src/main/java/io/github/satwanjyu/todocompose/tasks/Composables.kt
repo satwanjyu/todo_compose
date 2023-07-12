@@ -83,7 +83,7 @@ fun NavGraphBuilder.tasks(
     composable("tasks") {
         when (windowWidthSizeClass) {
             WindowWidthSizeClass.Compact -> TasksCompact()
-            WindowWidthSizeClass.Medium -> TasksCompact()
+            WindowWidthSizeClass.Medium -> TasksMedium()
             WindowWidthSizeClass.Expanded -> TasksExpanded()
         }
     }
@@ -99,7 +99,6 @@ private fun uiStateType(uiState: UiState) = when (uiState) {
 private fun TasksCompact(viewModel: TasksViewModel = viewModel()) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    // TODO Should be implemented as self-contained navigation
     AnimatedContent(
         targetState = uiState,
         transitionSpec = {
@@ -117,7 +116,7 @@ private fun TasksCompact(viewModel: TasksViewModel = viewModel()) {
         when (state) {
             is UiState.Tick, is UiState.Select -> TaskListScaffold(
                 uiState = state,
-                onEditTask = viewModel::insertTask,
+                onTick = viewModel::insertTask,
                 onSelectedTasksChange = { selectedTasks ->
                     when {
                         selectedTasks.isEmpty() -> viewModel.uiState.value =
@@ -168,11 +167,52 @@ private fun TasksCompact(viewModel: TasksViewModel = viewModel()) {
 }
 
 @Composable
+private fun TasksMedium(viewModel: TasksViewModel = viewModel()) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    NavRailScaffold(
+        uiState = uiState,
+        onEditBufferChange = { viewModel.uiState.value = UiState.Edit(uiState.tasks, it) },
+        onSelectedTasksChange = { selectedTasks ->
+            when {
+                selectedTasks.isEmpty() -> viewModel.uiState.value =
+                    UiState.Tick(uiState.tasks)
+
+                else -> viewModel.uiState.value =
+                    UiState.Select(uiState.tasks, selectedTasks.toImmutableSet())
+            }
+        },
+        onNavigateToEdit = {
+            viewModel.uiState.value = UiState.Edit(uiState.tasks, it)
+        },
+        onCreateBufferChange = { title, notes ->
+            viewModel.uiState.value =
+                UiState.Create(tasks = uiState.tasks, title = title, notes = notes)
+        },
+        onEditTask = {
+            viewModel.insertTask(it)
+            viewModel.uiState.value = UiState.Tick(uiState.tasks)
+        },
+        onDismiss = { viewModel.uiState.value = UiState.Tick(uiState.tasks) },
+        onRemoveTasks = {
+            viewModel.removeTasks(it)
+            viewModel.uiState.value = UiState.Tick(uiState.tasks)
+        },
+        onTaskCreate = { title, notes ->
+            viewModel.insertTask(title, notes)
+            viewModel.uiState.value = UiState.Tick(uiState.tasks)
+        },
+        onNavigateToCreate = {
+            viewModel.uiState.value = UiState.Create(uiState.tasks, "", "")
+        }
+    )
+}
+
+@Composable
 private fun TasksExpanded(viewModel: TasksViewModel = viewModel()) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    // TODO Basically identical to TasksCompact, consider merging the two.
-    TwoPaneTaskListScaffold(
+    NavRailTwoPaneScaffold(
         uiState = uiState,
         onEditBufferChange = { viewModel.uiState.value = UiState.Edit(uiState.tasks, it) },
         onSelectedTasksChange = { selectedTasks ->
@@ -317,7 +357,7 @@ private fun TaskItemPreviewTicked(
 private fun TaskListScaffold(
     modifier: Modifier = Modifier,
     uiState: UiState,
-    onEditTask: (Task) -> Unit,
+    onTick: (Task) -> Unit,
     onSelectedTasksChange: (Set<Task>) -> Unit,
     onRemoveTasks: (Set<Task>) -> Unit,
     onNavigateToCreate: () -> Unit,
@@ -427,7 +467,7 @@ private fun TaskListScaffold(
                 is UiState.Select -> TaskListMode.Select(uiState.selectedTasks)
                 else -> TaskListMode.Tick
             },
-            onTaskChange = onEditTask,
+            onTaskChange = onTick,
             onSelectedTasksChange = onSelectedTasksChange,
             onNavigateToEdit = onNavigateToEdit
         )
@@ -543,7 +583,7 @@ private fun TaskListScaffoldPreview(@PreviewParameter(LoremIpsum::class) lorem: 
 
         TaskListScaffold(
             uiState = UiState.Tick(tasks),
-            onEditTask = {},
+            onTick = {},
             onSelectedTasksChange = {},
             onRemoveTasks = {},
             onNavigateToCreate = {},
@@ -715,7 +755,7 @@ private fun EditTaskScaffoldPreview(@PreviewParameter(LoremIpsum::class) lorem: 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TwoPaneTaskListScaffold(
+private fun NavRailTwoPaneScaffold(
     modifier: Modifier = Modifier,
     uiState: UiState,
     onEditTask: (Task) -> Unit,
@@ -884,7 +924,7 @@ private fun TwoPaneTaskListScaffold(
 
 @Preview(device = Devices.TABLET)
 @Composable
-private fun TwoPaneTaskListScaffoldPreview(@PreviewParameter(LoremIpsum::class) lorem: String) {
+private fun NavRailTwoPaneScaffoldPreview(@PreviewParameter(LoremIpsum::class) lorem: String) {
     val words = lorem
         .replace(Regex("[^A-Za-z ]"), "")
         .split(" ")
@@ -910,8 +950,241 @@ private fun TwoPaneTaskListScaffoldPreview(@PreviewParameter(LoremIpsum::class) 
     }.toPersistentList()
 
     TodoComposeTheme {
-        TwoPaneTaskListScaffold(
+        NavRailTwoPaneScaffold(
             uiState = UiState.Edit(tasks, tasks.first()),
+            onEditTask = {},
+            onSelectedTasksChange = {},
+            onNavigateToEdit = {},
+            onCreateBufferChange = { _, _ -> },
+            onEditBufferChange = {},
+            onDismiss = {},
+            onRemoveTasks = {},
+            onTaskCreate = { _, _ -> },
+            onNavigateToCreate = {}
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NavRailScaffold(
+    modifier: Modifier = Modifier,
+    uiState: UiState,
+    onEditTask: (Task) -> Unit,
+    onSelectedTasksChange: (Set<Task>) -> Unit,
+    onNavigateToEdit: (Task) -> Unit,
+    onCreateBufferChange: (title: String, notes: String) -> Unit,
+    onEditBufferChange: (Task) -> Unit,
+    onDismiss: () -> Unit,
+    onRemoveTasks: (Set<Task>) -> Unit,
+    onTaskCreate: (title: String, notes: String) -> Unit,
+    onNavigateToCreate: () -> Unit,
+) {
+    Scaffold(
+        modifier = modifier,
+        topBar = {
+            val tweenFloat = tween<Float>(100)
+            val tweenIntSize = tween<IntSize>(100)
+            val tweenIntOffset = tween<IntOffset>(100)
+
+            TopAppBar(
+                title = {
+                    Crossfade(
+                        targetState = uiState,
+                        animationSpec = tweenFloat,
+                        label = "title crossfade"
+                    ) { state ->
+                        Text(
+                            when (state) {
+                                is UiState.Select -> stringResource(
+                                    R.string.task_selected,
+                                    state.selectedTasks.size
+                                )
+
+                                else -> stringResource(R.string.tasks)
+                            },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                },
+                navigationIcon = {
+                    AnimatedVisibility(
+                        when (uiState) {
+                            is UiState.Tick -> false
+                            else -> true
+                        },
+                        enter = slideInHorizontally(tweenIntOffset) { -it / 2 } +
+                                expandHorizontally(tweenIntSize, Alignment.Start) +
+                                fadeIn(tweenFloat),
+                        exit = slideOutHorizontally(tweenIntOffset) { -it / 2 } +
+                                shrinkHorizontally(tweenIntSize, Alignment.Start) +
+                                fadeOut(tweenFloat),
+                    ) {
+                        IconButton(onClick = {
+                            onDismiss()
+                        }) {
+                            Icon(Icons.Default.Close, stringResource(R.string.dismiss))
+                        }
+                    }
+                },
+                actions = {
+                    // Delete tasks
+                    AnimatedVisibility(
+                        when (uiState) {
+                            is UiState.Select -> true
+                            else -> false
+                        },
+                        enter = slideInHorizontally(tweenIntOffset) { it / 2 } +
+                                expandHorizontally(tweenIntSize, Alignment.End) +
+                                fadeIn(tweenFloat),
+                        exit = slideOutHorizontally(tweenIntOffset) { it / 2 } +
+                                shrinkHorizontally(tweenIntSize, Alignment.End) +
+                                fadeOut(tweenFloat),
+                    ) {
+                        IconButton(onClick = {
+                            when (uiState) {
+                                is UiState.Select -> {
+                                    onRemoveTasks(uiState.selectedTasks)
+                                }
+
+                                else -> {}
+                            }
+                        }) {
+                            Icon(
+                                Icons.Default.Delete,
+                                stringResource(R.string.remove_tasks)
+                            )
+                        }
+                    }
+                    // Confirm
+                    AnimatedVisibility(
+                        when (uiState) {
+                            is UiState.Edit -> true
+                            is UiState.Create -> true
+                            else -> false
+                        }
+                    ) {
+                        IconButton(
+                            onClick = {
+                                when (uiState) {
+                                    is UiState.Create -> {
+                                        onTaskCreate(uiState.title, uiState.notes)
+                                    }
+
+                                    is UiState.Edit -> {
+                                        onEditTask(uiState.task)
+                                    }
+
+                                    else -> {}
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Default.Check, stringResource(R.string.new_task))
+                        }
+                    }
+                },
+            )
+        }
+    ) { paddingValues ->
+        Row(
+            modifier = Modifier.padding(paddingValues),
+        ) {
+            NavigationRail(header = {
+                FloatingActionButton(
+                    onClick = {
+                        onNavigateToCreate()
+                    }
+                ) {
+                    Icon(Icons.Default.Add, stringResource(R.string.new_task))
+                }
+            }) {
+                // NavRail items
+            }
+            AnimatedContent(
+                targetState = uiState,
+                transitionSpec = {
+                    if (uiStateType(uiState) == 0) {
+                        EnterTransition.None togetherWith ExitTransition.None
+                    } else {
+                        (fadeIn(animationSpec = tween(220, delayMillis = 90)) +
+                                scaleIn(
+                                    initialScale = 0.92f,
+                                    animationSpec = tween(220, delayMillis = 90)
+                                ))
+                            .togetherWith(fadeOut(animationSpec = tween(90)))
+                    }
+                },
+                contentKey = { uiStateType(it) },
+                label = "animated content"
+            ) { uiState ->
+                when (uiState) {
+                    is UiState.Tick, is UiState.Select -> {
+                        TaskList(
+                            tasks = uiState.tasks,
+                            mode = when (uiState) {
+                                is UiState.Select -> TaskListMode.Select(uiState.selectedTasks)
+                                else -> TaskListMode.Tick
+                            },
+                            onTaskChange = onEditTask,
+                            onSelectedTasksChange = onSelectedTasksChange,
+                            onNavigateToEdit = onNavigateToEdit,
+                        )
+                    }
+
+                    is UiState.Create -> {
+                        EditTaskForm(
+                            title = uiState.title,
+                            onTitleChange = { onCreateBufferChange(it, uiState.notes) },
+                            notes = uiState.notes,
+                            onNotesChange = { onCreateBufferChange(uiState.title, it) }
+                        )
+                    }
+
+                    is UiState.Edit -> {
+                        EditTaskForm(
+                            title = uiState.task.title,
+                            onTitleChange = { onEditBufferChange(uiState.task.copy(title = it)) },
+                            notes = uiState.task.notes,
+                            onNotesChange = { onEditBufferChange(uiState.task.copy(notes = it)) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Preview(device = Devices.FOLDABLE)
+@Composable
+private fun NavRailScaffoldPreview(@PreviewParameter(LoremIpsum::class) lorem: String) {
+    val words = lorem
+        .replace(Regex("[^A-Za-z ]"), "")
+        .split(" ")
+
+    val tasks = List(20) { index ->
+        val titleOffset = (0..490).random()
+        val titleLimit = (2..10).random()
+        val title = words
+            .subList(titleOffset, titleOffset + titleLimit)
+            .joinToString(" ")
+        val notesOffset = (0..50).random()
+        val notesLimit = (0..450).random()
+        val notes = words
+            .subList(notesOffset, notesOffset + notesLimit)
+            .joinToString(" ")
+
+        Task(
+            id = index,
+            title = title,
+            notes = notes,
+            completed = false,
+        )
+    }.toPersistentList()
+
+    TodoComposeTheme {
+        NavRailScaffold(
+            uiState = UiState.Tick(tasks),
             onEditTask = {},
             onSelectedTasksChange = {},
             onNavigateToEdit = {},

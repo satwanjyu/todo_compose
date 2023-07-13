@@ -3,22 +3,25 @@ package io.github.satwanjyu.todocompose.tasks
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
-import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOut
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,15 +33,17 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DockedSearchBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LocalTextStyle
@@ -46,20 +51,28 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.PlainTooltipBox
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SearchBar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -71,7 +84,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.datasource.LoremIpsum
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -81,8 +93,10 @@ import io.github.satwanjyu.todocompose.R
 import io.github.satwanjyu.todocompose.ui.theme.TodoComposeTheme
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableSet
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.collections.immutable.toPersistentList
+import kotlinx.coroutines.delay
 
 
 fun NavGraphBuilder.tasks(
@@ -104,7 +118,9 @@ private fun uiStateType(uiState: UiState) = when (uiState) {
 }
 
 @Composable
-private fun TasksCompact(viewModel: TasksViewModel = viewModel()) {
+private fun TasksCompact(
+    viewModel: TasksViewModel = viewModel(),
+) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     AnimatedContent(
@@ -144,6 +160,13 @@ private fun TasksCompact(viewModel: TasksViewModel = viewModel()) {
                 onNavigateToEdit = {
                     viewModel.uiState.value = UiState.Edit(uiState.tasks, it)
                 },
+                onQueryChange = { query ->
+                    val tick = state as UiState.Tick
+                    viewModel.uiState.value = tick.copy(query = query)
+                    if (query != null) {
+                        viewModel.search(query)
+                    }
+                }
             )
 
             is UiState.Create -> {
@@ -212,6 +235,13 @@ private fun TasksMedium(viewModel: TasksViewModel = viewModel()) {
         },
         onNavigateToCreate = {
             viewModel.uiState.value = UiState.Create(uiState.tasks, "", "")
+        },
+        onQueryChange = { query ->
+            val tick = uiState as UiState.Tick
+            viewModel.uiState.value = tick.copy(query = query)
+            if (query != null) {
+                viewModel.search(query)
+            }
         }
     )
 }
@@ -254,6 +284,13 @@ private fun TasksExpanded(viewModel: TasksViewModel = viewModel()) {
         },
         onNavigateToCreate = {
             viewModel.uiState.value = UiState.Create(uiState.tasks, "", "")
+        },
+        onQueryChange = { query ->
+            val tick = uiState as UiState.Tick
+            viewModel.uiState.value = tick.copy(query = query)
+            if (query != null) {
+                viewModel.search(query)
+            }
         }
     )
 }
@@ -363,138 +400,267 @@ private fun TaskItemPreviewTicked(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TaskListScaffold(
-    modifier: Modifier = Modifier,
     uiState: UiState,
     onTick: (Task) -> Unit,
     onSelectedTasksChange: (Set<Task>) -> Unit,
     onRemoveTasks: (Set<Task>) -> Unit,
     onNavigateToCreate: () -> Unit,
     onNavigateToEdit: (Task) -> Unit,
+    onQueryChange: (String?) -> Unit,
 ) {
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    var searchBarVisible by remember { mutableStateOf(true) }
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // Scrolling down
+                if (available.y < -10) {
+                    searchBarVisible = false
+                    // Scrolling up
+                } else if (available.y > 10) {
+                    searchBarVisible = true
+                }
+
+                return Offset.Zero
+            }
+        }
+    }
 
     Scaffold(
-        modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = {
-            // TODO Refer to Material Motion
-            val tweenFloat = tween<Float>(100)
-            val tweenIntSize = tween<IntSize>(100)
-            val tweenIntOffset = tween<IntOffset>(100)
-            LargeTopAppBar(
-                title = {
-                    Crossfade(
-                        targetState = uiState,
-                        animationSpec = tweenFloat,
-                        label = "title crossfade"
-                    ) { state ->
-                        Text(
-                            when (state) {
-                                is UiState.Select -> stringResource(
-                                    R.string.task_selected,
-                                    state.selectedTasks.size
-                                )
-
-                                else -> stringResource(R.string.tasks)
-                            },
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+        floatingActionButton = {
+            val searching = uiState is UiState.Tick && uiState.query != null
+            AnimatedVisibility(
+                visible = !searching,
+                enter = slideIn { IntOffset(it.width / 2, it.height / 2) } + fadeIn(),
+                exit = slideOut { IntOffset(it.width / 2, it.height / 2) } + fadeOut(),
+            ) {
+                PlainTooltipBox(tooltip = { Text(stringResource(R.string.new_task)) }) {
+                    FloatingActionButton(
+                        modifier = Modifier.tooltipAnchor(),
+                        onClick = onNavigateToCreate,
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = stringResource(R.string.new_task)
                         )
                     }
-                },
-                navigationIcon = {
-                    val visible = when (uiState) {
-                        is UiState.Select -> true
-                        else -> false
-                    }
-                    AnimatedVisibility(
-                        visible,
-                        enter = slideInHorizontally(tweenIntOffset) { -it / 2 } +
-                                expandHorizontally(tweenIntSize, Alignment.Start) +
-                                fadeIn(tweenFloat),
-                        exit = slideOutHorizontally(tweenIntOffset) { -it / 2 } +
-                                shrinkHorizontally(tweenIntSize, Alignment.Start) +
-                                fadeOut(tweenFloat),
-                    ) {
-                        PlainTooltipBox(
-                            tooltip = { Text(stringResource(R.string.dismiss)) }) {
-                            IconButton(
-                                modifier = Modifier.tooltipAnchor(),
-                                onClick = {
-                                    when (uiState) {
-                                        is UiState.Select -> onSelectedTasksChange(emptySet())
-                                        else -> {}
-                                    }
-                                }) {
-                                Icon(Icons.Default.Close, stringResource(R.string.dismiss))
-                            }
-                        }
-                    }
-                },
-                actions = {
-                    AnimatedVisibility(
-                        visible = when (uiState) {
-                            is UiState.Select -> true
-                            else -> false
-                        },
-                        enter = slideInHorizontally(tweenIntOffset) { it / 2 } +
-                                expandHorizontally(tweenIntSize, Alignment.End) +
-                                fadeIn(tweenFloat),
-                        exit = slideOutHorizontally(tweenIntOffset) { it / 2 } +
-                                shrinkHorizontally(tweenIntSize, Alignment.End) +
-                                fadeOut(tweenFloat),
-                    ) {
-                        PlainTooltipBox(
-                            tooltip = { Text(stringResource(R.string.remove_tasks)) }
-                        ) {
-                            IconButton(
-                                modifier = Modifier.tooltipAnchor(),
-                                onClick = {
-                                    when (uiState) {
-                                        is UiState.Select -> {
-                                            onRemoveTasks(uiState.selectedTasks)
-                                        }
-
-                                        else -> {}
-                                    }
-                                }) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    stringResource(R.string.remove_tasks)
-                                )
-                            }
-                        }
-
-                    }
-                },
-                scrollBehavior = scrollBehavior
-            )
-        },
-        floatingActionButton = {
-            PlainTooltipBox(tooltip = { Text(stringResource(R.string.new_task)) }) {
-                FloatingActionButton(
-                    modifier = Modifier.tooltipAnchor(),
-                    onClick = onNavigateToCreate,
-                ) {
-                    Icon(
-                        Icons.Default.Add,
-                        contentDescription = stringResource(R.string.new_task)
-                    )
                 }
             }
         }
     ) { paddingValues ->
-        TaskList(
-            modifier = Modifier.padding(paddingValues),
-            tasks = uiState.tasks,
-            mode = when (uiState) {
-                is UiState.Select -> TaskListMode.Select(uiState.selectedTasks)
-                else -> TaskListMode.Tick
-            },
-            onTaskChange = onTick,
-            onSelectedTasksChange = onSelectedTasksChange,
-            onNavigateToEdit = onNavigateToEdit
+        Box(
+            modifier = Modifier
+                .padding(paddingValues)
+                .nestedScroll(nestedScrollConnection),
+        ) {
+            TaskList(
+                tasks = uiState.tasks,
+                mode = when (uiState) {
+                    is UiState.Select -> TaskListMode.Select(uiState.selectedTasks)
+                    else -> TaskListMode.Tick
+                },
+                onTaskChange = onTick,
+                onSelectedTasksChange = onSelectedTasksChange,
+                onNavigateToEdit = onNavigateToEdit,
+                contentPadding = PaddingValues(top = 64.dp)
+            )
+            AnimatedContent(
+                modifier = Modifier.align(Alignment.TopCenter),
+                targetState = uiState,
+                contentKey = { it::class },
+                label = "top bar animated state"
+            ) { uiState ->
+                when (uiState) {
+                    is UiState.Tick -> {
+                        AnimatedVisibility(
+                            visible = searchBarVisible,
+                            enter = slideInVertically { -it },
+                            exit = slideOutVertically { -it },
+                        ) {
+                            TasksSearchBar(
+                                docked = false,
+                                query = uiState.query,
+                                onQueryChange = onQueryChange,
+                                enabled = uiState.tasks.isNotEmpty(),
+                                queriedTasks = uiState.queriedTasks,
+                                onNavigateToEdit = onNavigateToEdit,
+                            )
+                        }
+                    }
+
+                    is UiState.Select -> {
+                        TasksSelectAppBar(
+                            selectedTasks = uiState.selectedTasks,
+                            onSelectedTasksChange = onSelectedTasksChange,
+                            onRemoveTasks = onRemoveTasks,
+                        )
+                    }
+
+                    else -> {}
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
+@Composable
+private fun TasksSearchBar(
+    modifier: Modifier = Modifier,
+    docked: Boolean,
+    query: String?,
+    onQueryChange: (String?) -> Unit,
+    enabled: Boolean,
+    queriedTasks: ImmutableList<Task>,
+    onNavigateToEdit: (Task) -> Unit,
+) {
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val onSearch = { keyboardController?.hide() }
+    val active = query != null
+    val onActiveChange = { newActive: Boolean ->
+        if (newActive) {
+            onQueryChange("")
+        } else {
+            onQueryChange(null)
+        }
+    }
+    val leadingIcon = @Composable {
+        if (query != null) {
+            PlainTooltipBox(
+                tooltip = { Text(stringResource(R.string.go_back)) }
+            ) {
+                IconButton(
+                    modifier = Modifier.tooltipAnchor(),
+                    onClick = {
+                        onQueryChange(null)
+                    }
+                ) {
+                    Icon(
+                        Icons.Default.ArrowBack,
+                        stringResource(R.string.go_back)
+                    )
+                }
+            }
+        } else {
+            Icon(Icons.Default.Search, stringResource(R.string.search))
+        }
+    }
+    val trailingIcon = @Composable {
+        AnimatedVisibility(
+            visible = !query.isNullOrEmpty(),
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            PlainTooltipBox(tooltip = { Text(stringResource(R.string.clear)) }) {
+                IconButton(
+                    modifier = Modifier.tooltipAnchor(),
+                    onClick = { onQueryChange("") }
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        stringResource(R.string.clear)
+                    )
+                }
+            }
+        }
+    }
+    val placeholder = @Composable { Text(stringResource(R.string.search_tasks)) }
+    val content: @Composable ColumnScope.() -> Unit = {
+        LaunchedEffect(query) {
+            delay(500)
+            onQueryChange(query)
+        }
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            items(queriedTasks) { task ->
+                ListItem(
+                    headlineContent = { Text(task.title) },
+                    modifier = Modifier.clickable {
+                        onNavigateToEdit(task)
+                    }
+                )
+            }
+        }
+    }
+
+    if (!docked) {
+        SearchBar(
+            modifier = modifier,
+            query = query ?: "",
+            onQueryChange = onQueryChange,
+            onSearch = { onSearch() },
+            active = active,
+            onActiveChange = onActiveChange,
+            leadingIcon = leadingIcon,
+            trailingIcon = trailingIcon,
+            placeholder = placeholder,
+            enabled = enabled,
+            content = content
+        )
+    } else {
+        DockedSearchBar(
+            modifier = modifier,
+            query = query ?: "",
+            onQueryChange = onQueryChange,
+            onSearch = { onSearch() },
+            active = active,
+            onActiveChange = onActiveChange,
+            leadingIcon = leadingIcon,
+            trailingIcon = trailingIcon,
+            placeholder = placeholder,
+            enabled = enabled,
+            content = content
         )
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TasksSelectAppBar(
+    selectedTasks: ImmutableSet<Task>,
+    onSelectedTasksChange: (Set<Task>) -> Unit,
+    onRemoveTasks: (Set<Task>) -> Unit,
+    scrollBehavior: TopAppBarScrollBehavior? = null,
+) {
+    TopAppBar(
+        title = {
+            Text(
+                stringResource(
+                    R.string.task_selected,
+                    selectedTasks.size
+                )
+            )
+        },
+        navigationIcon = {
+            PlainTooltipBox(
+                tooltip = { Text(stringResource(R.string.dismiss)) }) {
+                IconButton(
+                    modifier = Modifier.tooltipAnchor(),
+                    onClick = {
+                        onSelectedTasksChange(emptySet())
+                    }) {
+                    Icon(Icons.Default.Close, stringResource(R.string.dismiss))
+                }
+            }
+        },
+        actions = {
+            PlainTooltipBox(
+                tooltip = { Text(stringResource(R.string.remove_tasks)) }
+            ) {
+                IconButton(
+                    modifier = Modifier.tooltipAnchor(),
+                    onClick = {
+                        onRemoveTasks(selectedTasks)
+                    }) {
+                    Icon(
+                        Icons.Default.Delete,
+                        stringResource(R.string.remove_tasks)
+                    )
+                }
+            }
+        },
+        scrollBehavior = scrollBehavior
+    )
 }
 
 private sealed interface TaskListMode {
@@ -510,9 +676,11 @@ private fun TaskList(
     onTaskChange: (Task) -> Unit,
     onSelectedTasksChange: (Set<Task>) -> Unit,
     onNavigateToEdit: (Task) -> Unit,
+    contentPadding: PaddingValues = PaddingValues(),
 ) {
     LazyColumn(
-        modifier = modifier,
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = contentPadding,
     ) {
         items(tasks, key = { it.id }) { task ->
             TaskItem(
@@ -555,11 +723,11 @@ private fun TaskList(
                     when (mode) {
                         is TaskListMode.Tick -> onSelectedTasksChange(setOf(task))
                         is TaskListMode.Select -> {
-                            val selected = mode.selectedTasks.contains(task)
+                            val currentlySelected = mode.selectedTasks.contains(task)
                             val selectedTasksMut = mode.selectedTasks.toMutableSet()
                             when {
-                                selected -> selectedTasksMut.remove(task)
-                                !selected -> selectedTasksMut.add(task)
+                                currentlySelected -> selectedTasksMut.remove(task)
+                                !currentlySelected -> selectedTasksMut.add(task)
                             }
                             onSelectedTasksChange(selectedTasksMut)
                         }
@@ -611,6 +779,7 @@ private fun TaskListScaffoldPreview(@PreviewParameter(LoremIpsum::class) lorem: 
             onRemoveTasks = {},
             onNavigateToCreate = {},
             onNavigateToEdit = {},
+            onQueryChange = {},
         )
     }
 }
@@ -625,7 +794,6 @@ private sealed interface EditTaskMode {
 }
 
 // TODO Expand transition
-// TODO Intercept system back
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EditTaskScaffold(
@@ -637,9 +805,10 @@ private fun EditTaskScaffold(
     onEditBufferChange: (Task) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     Scaffold(
+        modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             TopAppBar(
                 navigationIcon = {
@@ -693,7 +862,6 @@ private fun EditTaskScaffold(
                 scrollBehavior = scrollBehavior,
             )
         },
-        modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
     ) { paddingValues ->
         EditTaskForm(
             modifier = Modifier
@@ -732,6 +900,7 @@ private fun EditTaskForm(
     onTitleChange: (String) -> Unit,
     notes: String,
     onNotesChange: (String) -> Unit,
+    contentPadding: PaddingValues = PaddingValues(),
 ) {
     var titleValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(title))
@@ -743,6 +912,7 @@ private fun EditTaskForm(
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = modifier.fillMaxHeight(),
+        contentPadding = contentPadding,
     ) {
         val textFieldModifier = Modifier
             .fillMaxWidth()
@@ -814,6 +984,7 @@ private fun EditTaskScaffoldPreview(@PreviewParameter(LoremIpsum::class) lorem: 
     }
 }
 
+// TODO Remodel UiState
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NavRailTwoPaneScaffold(
@@ -828,105 +999,31 @@ private fun NavRailTwoPaneScaffold(
     onRemoveTasks: (Set<Task>) -> Unit,
     onTaskCreate: (title: String, notes: String) -> Unit,
     onNavigateToCreate: () -> Unit,
+    onQueryChange: (String?) -> Unit,
 ) {
     Scaffold(
         modifier = modifier,
-        topBar = {
-            val tweenFloat = tween<Float>(100)
-            val tweenIntSize = tween<IntSize>(100)
-            val tweenIntOffset = tween<IntOffset>(100)
-
-            TopAppBar(
-                title = { Text(stringResource(R.string.tasks)) },
-                navigationIcon = {
-                    AnimatedVisibility(
-                        when (uiState) {
-                            is UiState.Tick -> false
-                            else -> true
-                        },
-                        enter = slideInHorizontally(tweenIntOffset) { -it / 2 } +
-                                expandHorizontally(tweenIntSize, Alignment.Start) +
-                                fadeIn(tweenFloat),
-                        exit = slideOutHorizontally(tweenIntOffset) { -it / 2 } +
-                                shrinkHorizontally(tweenIntSize, Alignment.Start) +
-                                fadeOut(tweenFloat),
-                    ) {
-                        PlainTooltipBox(tooltip = { Text(stringResource(R.string.dismiss)) }) {
-                            IconButton(
-                                modifier = Modifier.tooltipAnchor(),
-                                onClick = onDismiss
-                            ) {
-                                Icon(Icons.Default.Close, stringResource(R.string.dismiss))
-                            }
-                        }
-                    }
-                },
-                actions = {
-                    // Delete tasks
-                    AnimatedVisibility(
-                        when (uiState) {
-                            is UiState.Select -> true
-                            else -> false
-                        },
-                        enter = slideInHorizontally(tweenIntOffset) { it / 2 } +
-                                expandHorizontally(tweenIntSize, Alignment.End) +
-                                fadeIn(tweenFloat),
-                        exit = slideOutHorizontally(tweenIntOffset) { it / 2 } +
-                                shrinkHorizontally(tweenIntSize, Alignment.End) +
-                                fadeOut(tweenFloat),
-                    ) {
-                        PlainTooltipBox(tooltip = { Text(stringResource(R.string.remove_tasks)) }) {
-                            IconButton(
-                                modifier = Modifier.tooltipAnchor(),
-                                onClick = {
-                                    when (uiState) {
-                                        is UiState.Select -> {
-                                            onRemoveTasks(uiState.selectedTasks)
-                                        }
-
-                                        else -> {}
-                                    }
-                                }) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    stringResource(R.string.remove_tasks)
-                                )
-                            }
-                        }
-                    }
-                    // Confirm
-                    AnimatedVisibility(
-                        when (uiState) {
-                            is UiState.Edit -> true
-                            is UiState.Create -> true
-                            else -> false
-                        }
-                    ) {
-                        PlainTooltipBox(tooltip = { Text(stringResource(R.string.new_task)) }) {
-                            IconButton(
-                                modifier = Modifier.tooltipAnchor(),
-                                onClick = {
-                                    when (uiState) {
-                                        is UiState.Create -> {
-                                            onTaskCreate(uiState.title, uiState.notes)
-                                        }
-
-                                        is UiState.Edit -> {
-                                            onEditTask(uiState.task)
-                                        }
-
-                                        else -> {}
-                                    }
-                                }
-                            ) {
-                                Icon(Icons.Default.Check, stringResource(R.string.new_task))
-                            }
-                        }
-                    }
-                },
-            )
-        }
     ) { paddingValues ->
+        var searchBarVisible by remember { mutableStateOf(true) }
+        val nestedScrollConnection = remember {
+            object : NestedScrollConnection {
+                override fun onPreScroll(
+                    available: Offset,
+                    source: NestedScrollSource,
+                ): Offset {
+                    // Scrolling down
+                    if (available.y < -10) {
+                        searchBarVisible = false
+                        // Scrolling up
+                    } else if (available.y > 10) {
+                        searchBarVisible = true
+                    }
+
+                    return Offset.Zero
+                }
+            }
+        }
+
         Row(modifier = Modifier.padding(paddingValues)) {
             NavigationRail(header = {
                 PlainTooltipBox(tooltip = { Text(stringResource(R.string.new_task)) }) {
@@ -944,52 +1041,113 @@ private fun NavRailTwoPaneScaffold(
                 // NavRail items
             }
             // TODO Highlight editing task
-            TaskList(
-                modifier = Modifier.weight(1f),
-                tasks = uiState.tasks,
-                mode = when (uiState) {
-                    is UiState.Select -> TaskListMode.Select(uiState.selectedTasks)
-                    else -> TaskListMode.Tick
-                },
-                onTaskChange = onEditTask,
-                onSelectedTasksChange = onSelectedTasksChange,
-                onNavigateToEdit = onNavigateToEdit,
-            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .nestedScroll(nestedScrollConnection)
+            ) {
+                TaskList(
+                    tasks = uiState.tasks,
+                    mode = when (uiState) {
+                        is UiState.Select -> TaskListMode.Select(uiState.selectedTasks)
+                        else -> TaskListMode.Tick
+                    },
+                    onTaskChange = onEditTask,
+                    onSelectedTasksChange = onSelectedTasksChange,
+                    onNavigateToEdit = onNavigateToEdit,
+                    contentPadding = PaddingValues(
+                        top = when (uiState) {
+                            is UiState.Tick -> 68.dp
+                            else -> 0.dp
+                        }
+                    ),
+                )
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = uiState is UiState.Tick && searchBarVisible,
+                    enter = slideInVertically { -it },
+                    exit = slideOutVertically { -it },
+                ) {
+                    if (uiState is UiState.Tick) {
+                        TasksSearchBar(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(8.dp),
+                            docked = true,
+                            query = uiState.query,
+                            onQueryChange = onQueryChange,
+                            enabled = uiState.tasks.isNotEmpty(),
+                            queriedTasks = uiState.queriedTasks,
+                            onNavigateToEdit = onNavigateToEdit,
+                        )
+                    } else {
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            TasksSearchBar(
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .padding(vertical = 8.dp),
+                                docked = true,
+                                query = null,
+                                onQueryChange = {},
+                                enabled = false,
+                                queriedTasks = persistentListOf(),
+                                onNavigateToEdit = {},
+                            )
+                        }
+                    }
+                }
+            }
             AnimatedContent(
                 uiState,
                 modifier = Modifier.weight(1f),
                 contentKey = { it::class },
-                label = "second pane crossfade"
-            ) { state ->
-                when (state) {
-                    is UiState.Tick -> {}
+                label = "second pane animated content"
+            ) { uiState ->
+                Column {
+                    when (uiState) {
+                        is UiState.Tick -> {}
+                        is UiState.Select -> {
+                            TasksSelectAppBar(
+                                selectedTasks = uiState.selectedTasks,
+                                onSelectedTasksChange = onSelectedTasksChange,
+                                onRemoveTasks = onRemoveTasks,
+                            )
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                Text(
+                                    stringResource(
+                                        R.string.task_selected,
+                                        uiState.selectedTasks.size
+                                    ),
+                                    modifier = Modifier.align(Alignment.Center),
+                                    style = MaterialTheme.typography.headlineMedium
+                                )
+                            }
+                        }
 
-                    is UiState.Select -> {
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            Text(
-                                stringResource(R.string.task_selected, state.selectedTasks.size),
-                                modifier = Modifier.align(Alignment.Center),
-                                style = MaterialTheme.typography.headlineMedium
+                        is UiState.Create -> {
+                            EditTaskAppBar(
+                                onDismiss = onDismiss,
+                                onTaskCreate = { onTaskCreate(uiState.title, uiState.notes) }
+                            )
+                            EditTaskForm(
+                                title = uiState.title,
+                                onTitleChange = { onCreateBufferChange(it, uiState.notes) },
+                                notes = uiState.notes,
+                                onNotesChange = { onCreateBufferChange(uiState.title, it) }
                             )
                         }
-                    }
 
-                    is UiState.Edit -> {
-                        EditTaskForm(
-                            title = state.task.title,
-                            onTitleChange = { onEditBufferChange(state.task.copy(title = it)) },
-                            notes = state.task.notes,
-                            onNotesChange = { onEditBufferChange(state.task.copy(notes = it)) }
-                        )
-                    }
-
-                    is UiState.Create -> {
-                        EditTaskForm(
-                            title = state.title,
-                            onTitleChange = { onCreateBufferChange(it, state.notes) },
-                            notes = state.notes,
-                            onNotesChange = { onCreateBufferChange(state.title, it) }
-                        )
+                        is UiState.Edit -> {
+                            CreateTaskAppBar(
+                                onDismiss = onDismiss,
+                                onEditTask = { onEditTask(uiState.task) }
+                            )
+                            EditTaskForm(
+                                title = uiState.task.title,
+                                onTitleChange = { onEditBufferChange(uiState.task.copy(title = it)) },
+                                notes = uiState.task.notes,
+                                onNotesChange = { onEditBufferChange(uiState.task.copy(notes = it)) }
+                            )
+                        }
                     }
                 }
             }
@@ -1035,9 +1193,76 @@ private fun NavRailTwoPaneScaffoldPreview(@PreviewParameter(LoremIpsum::class) l
             onDismiss = {},
             onRemoveTasks = {},
             onTaskCreate = { _, _ -> },
-            onNavigateToCreate = {}
+            onNavigateToCreate = {},
+            onQueryChange = {},
         )
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditTaskAppBar(
+    onDismiss: () -> Unit,
+    onTaskCreate: () -> Unit,
+) {
+    TopAppBar(
+        title = { Text(stringResource(R.string.new_task)) },
+        navigationIcon = {
+            PlainTooltipBox(tooltip = { Text(stringResource(R.string.dismiss)) }) {
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = stringResource(R.string.dismiss)
+                    )
+                }
+            }
+        },
+        actions = {
+            PlainTooltipBox(tooltip = { Text(stringResource(R.string.confirm)) }) {
+                IconButton(onClick = {
+                    onTaskCreate()
+                }) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = stringResource(R.string.confirm)
+                    )
+                }
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CreateTaskAppBar(
+    onDismiss: () -> Unit,
+    onEditTask: () -> Unit,
+) {
+    TopAppBar(
+        title = { Text(stringResource(R.string.edit_task)) },
+        navigationIcon = {
+            PlainTooltipBox(tooltip = { Text(stringResource(R.string.dismiss)) }) {
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = stringResource(R.string.dismiss)
+                    )
+                }
+            }
+        },
+        actions = {
+            PlainTooltipBox(tooltip = { Text(stringResource(R.string.confirm)) }) {
+                IconButton(onClick = {
+                    onEditTask()
+                }) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = stringResource(R.string.confirm)
+                    )
+                }
+            }
+        }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1054,128 +1279,34 @@ private fun NavRailScaffold(
     onRemoveTasks: (Set<Task>) -> Unit,
     onTaskCreate: (title: String, notes: String) -> Unit,
     onNavigateToCreate: () -> Unit,
+    onQueryChange: (String?) -> Unit,
 ) {
     Scaffold(
         modifier = modifier,
-        topBar = {
-            val tweenFloat = tween<Float>(100)
-            val tweenIntSize = tween<IntSize>(100)
-            val tweenIntOffset = tween<IntOffset>(100)
-
-            TopAppBar(
-                title = {
-                    Crossfade(
-                        targetState = uiState,
-                        animationSpec = tweenFloat,
-                        label = "title crossfade"
-                    ) { state ->
-                        Text(
-                            when (state) {
-                                is UiState.Select -> stringResource(
-                                    R.string.task_selected,
-                                    state.selectedTasks.size
-                                )
-
-                                else -> stringResource(R.string.tasks)
-                            },
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                },
-                navigationIcon = {
-                    AnimatedVisibility(
-                        when (uiState) {
-                            is UiState.Tick -> false
-                            else -> true
-                        },
-                        enter = slideInHorizontally(tweenIntOffset) { -it / 2 } +
-                                expandHorizontally(tweenIntSize, Alignment.Start) +
-                                fadeIn(tweenFloat),
-                        exit = slideOutHorizontally(tweenIntOffset) { -it / 2 } +
-                                shrinkHorizontally(tweenIntSize, Alignment.Start) +
-                                fadeOut(tweenFloat),
-                    ) {
-                        PlainTooltipBox(tooltip = { Text(stringResource(R.string.dismiss)) }) {
-                            IconButton(
-                                modifier = Modifier.tooltipAnchor(),
-                                onClick = {
-                                    onDismiss()
-                                }) {
-                                Icon(Icons.Default.Close, stringResource(R.string.dismiss))
-                            }
-                        }
-                    }
-                },
-                actions = {
-                    // Delete tasks
-                    AnimatedVisibility(
-                        when (uiState) {
-                            is UiState.Select -> true
-                            else -> false
-                        },
-                        enter = slideInHorizontally(tweenIntOffset) { it / 2 } +
-                                expandHorizontally(tweenIntSize, Alignment.End) +
-                                fadeIn(tweenFloat),
-                        exit = slideOutHorizontally(tweenIntOffset) { it / 2 } +
-                                shrinkHorizontally(tweenIntSize, Alignment.End) +
-                                fadeOut(tweenFloat),
-                    ) {
-                        PlainTooltipBox(tooltip = { Text(stringResource(R.string.remove_tasks)) }) {
-                            IconButton(
-                                modifier = Modifier.tooltipAnchor(),
-                                onClick = {
-                                    when (uiState) {
-                                        is UiState.Select -> {
-                                            onRemoveTasks(uiState.selectedTasks)
-                                        }
-
-                                        else -> {}
-                                    }
-                                }) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    stringResource(R.string.remove_tasks)
-                                )
-                            }
-                        }
-                    }
-                    // Confirm
-                    AnimatedVisibility(
-                        when (uiState) {
-                            is UiState.Edit -> true
-                            is UiState.Create -> true
-                            else -> false
-                        }
-                    ) {
-                        PlainTooltipBox(tooltip = { Text(stringResource(R.string.new_task)) }) {
-                            IconButton(
-                                modifier = Modifier.tooltipAnchor(),
-                                onClick = {
-                                    when (uiState) {
-                                        is UiState.Create -> {
-                                            onTaskCreate(uiState.title, uiState.notes)
-                                        }
-
-                                        is UiState.Edit -> {
-                                            onEditTask(uiState.task)
-                                        }
-
-                                        else -> {}
-                                    }
-                                }
-                            ) {
-                                Icon(Icons.Default.Check, stringResource(R.string.new_task))
-                            }
-                        }
-                    }
-                },
-            )
-        }
     ) { paddingValues ->
         Row(
             modifier = Modifier.padding(paddingValues),
         ) {
+            var searchBarVisible by remember { mutableStateOf(true) }
+            val nestedScrollConnection = remember {
+                object : NestedScrollConnection {
+                    override fun onPreScroll(
+                        available: Offset,
+                        source: NestedScrollSource,
+                    ): Offset {
+                        // Scrolling down
+                        if (available.y < -10) {
+                            searchBarVisible = false
+                            // Scrolling up
+                        } else if (available.y > 10) {
+                            searchBarVisible = true
+                        }
+
+                        return Offset.Zero
+                    }
+                }
+            }
+
             NavigationRail(header = {
                 PlainTooltipBox(tooltip = { Text(stringResource(R.string.new_task)) }) {
                     FloatingActionButton(
@@ -1191,53 +1322,112 @@ private fun NavRailScaffold(
             }) {
                 // NavRail items
             }
-            AnimatedContent(
-                targetState = uiState,
-                transitionSpec = {
-                    if (uiStateType(uiState) == 0) {
-                        EnterTransition.None togetherWith ExitTransition.None
-                    } else {
-                        (fadeIn(animationSpec = tween(220, delayMillis = 90)) +
-                                scaleIn(
-                                    initialScale = 0.92f,
-                                    animationSpec = tween(220, delayMillis = 90)
-                                ))
-                            .togetherWith(fadeOut(animationSpec = tween(90)))
-                    }
-                },
-                contentKey = { uiStateType(it) },
-                label = "animated content"
-            ) { uiState ->
-                when (uiState) {
-                    is UiState.Tick, is UiState.Select -> {
-                        TaskList(
-                            tasks = uiState.tasks,
-                            mode = when (uiState) {
-                                is UiState.Select -> TaskListMode.Select(uiState.selectedTasks)
-                                else -> TaskListMode.Tick
-                            },
-                            onTaskChange = onEditTask,
-                            onSelectedTasksChange = onSelectedTasksChange,
-                            onNavigateToEdit = onNavigateToEdit,
-                        )
-                    }
+            Box(
+                modifier = Modifier.nestedScroll(nestedScrollConnection)
+            ) {
+                AnimatedContent(
+                    targetState = uiState,
+                    transitionSpec = {
+                        if (uiStateType(uiState) == 0) {
+                            EnterTransition.None togetherWith ExitTransition.None
+                        } else {
+                            (fadeIn(animationSpec = tween(220, delayMillis = 90)) +
+                                    scaleIn(
+                                        initialScale = 0.92f,
+                                        animationSpec = tween(220, delayMillis = 90)
+                                    ))
+                                .togetherWith(fadeOut(animationSpec = tween(90)))
+                        }
+                    },
+                    contentKey = { uiStateType(it) },
+                    label = "animated content"
+                ) { uiState ->
+                    val contentPaddingTop = (64 + 8).dp
 
-                    is UiState.Create -> {
-                        EditTaskForm(
-                            title = uiState.title,
-                            onTitleChange = { onCreateBufferChange(it, uiState.notes) },
-                            notes = uiState.notes,
-                            onNotesChange = { onCreateBufferChange(uiState.title, it) }
-                        )
-                    }
+                    when (uiState) {
+                        is UiState.Tick, is UiState.Select -> {
+                            TaskList(
+                                tasks = uiState.tasks,
+                                mode = when (uiState) {
+                                    is UiState.Select -> TaskListMode.Select(uiState.selectedTasks)
+                                    else -> TaskListMode.Tick
+                                },
+                                onTaskChange = onEditTask,
+                                onSelectedTasksChange = onSelectedTasksChange,
+                                onNavigateToEdit = onNavigateToEdit,
+                                contentPadding = PaddingValues(top = contentPaddingTop),
+                            )
+                        }
 
-                    is UiState.Edit -> {
-                        EditTaskForm(
-                            title = uiState.task.title,
-                            onTitleChange = { onEditBufferChange(uiState.task.copy(title = it)) },
-                            notes = uiState.task.notes,
-                            onNotesChange = { onEditBufferChange(uiState.task.copy(notes = it)) }
-                        )
+                        is UiState.Create -> {
+                            EditTaskForm(
+                                title = uiState.title,
+                                onTitleChange = { onCreateBufferChange(it, uiState.notes) },
+                                notes = uiState.notes,
+                                onNotesChange = { onCreateBufferChange(uiState.title, it) },
+                                contentPadding = PaddingValues(top = contentPaddingTop),
+                            )
+                        }
+
+                        is UiState.Edit -> {
+                            EditTaskForm(
+                                title = uiState.task.title,
+                                onTitleChange = { onEditBufferChange(uiState.task.copy(title = it)) },
+                                notes = uiState.task.notes,
+                                onNotesChange = { onEditBufferChange(uiState.task.copy(notes = it)) },
+                                contentPadding = PaddingValues(top = contentPaddingTop),
+                            )
+                        }
+                    }
+                }
+                AnimatedContent(
+                    targetState = uiState,
+                    modifier = Modifier.fillMaxWidth(),
+                    contentKey = { it::class },
+                    label = "top bar animated state"
+                ) { uiState ->
+                    when (uiState) {
+                        is UiState.Tick -> {
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = searchBarVisible,
+                                enter = slideInVertically { -it },
+                                exit = slideOutVertically { -it },
+                            ) {
+                                TasksSearchBar(
+                                    modifier = Modifier
+                                        .align(Alignment.TopCenter)
+                                        .padding(8.dp),
+                                    docked = true,
+                                    query = uiState.query,
+                                    onQueryChange = onQueryChange,
+                                    enabled = uiState.tasks.isNotEmpty(),
+                                    queriedTasks = uiState.queriedTasks,
+                                    onNavigateToEdit = {},
+                                )
+                            }
+                        }
+
+                        is UiState.Select -> {
+                            TasksSelectAppBar(
+                                selectedTasks = uiState.selectedTasks,
+                                onSelectedTasksChange = onSelectedTasksChange,
+                                onRemoveTasks = onRemoveTasks,
+                            )
+                        }
+
+                        is UiState.Create -> {
+                            EditTaskAppBar(
+                                onDismiss = onDismiss,
+                                onTaskCreate = { onTaskCreate(uiState.title, uiState.notes) }
+                            )
+                        }
+
+                        is UiState.Edit -> {
+                            CreateTaskAppBar(
+                                onDismiss = onDismiss,
+                                onEditTask = { onEditTask(uiState.task) }
+                            )
+                        }
                     }
                 }
             }
@@ -1283,7 +1473,8 @@ private fun NavRailScaffoldPreview(@PreviewParameter(LoremIpsum::class) lorem: S
             onDismiss = {},
             onRemoveTasks = {},
             onTaskCreate = { _, _ -> },
-            onNavigateToCreate = {}
+            onNavigateToCreate = {},
+            onQueryChange = {},
         )
     }
 }

@@ -9,4 +9,8 @@
     <string name="new_task">New task</string>
     <string name="task_selected">%d selected</string>
     <string name="remove_tasks">Remove tasks</string>
+    <string name="go_back">Go back</string>
+    <string name="search">Search</string>
+    <string name="search_tasks">Search tasks</string>
+    <string name="clear">Clear</string>
 </resources>

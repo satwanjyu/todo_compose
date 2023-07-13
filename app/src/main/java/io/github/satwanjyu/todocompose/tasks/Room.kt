@@ -4,29 +4,32 @@ import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Entity
+import androidx.room.Fts4
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
-@Entity
+@Fts4(notIndexed = ["completed"])
+@Entity(tableName = "tasks")
 data class TaskEntity(
-    @PrimaryKey(autoGenerate = true) val uid: Int,
-    @ColumnInfo(name = "title") val title: String,
-    @ColumnInfo(name = "notes") val notes: String,
-    @ColumnInfo(name = "completed") val completed: Boolean,
+    @PrimaryKey @ColumnInfo(name = "rowid") val id: Int,
+    val title: String,
+    val notes: String,
+    val completed: Boolean,
 ) {
-    internal fun toTask() = Task(uid, title, notes, completed)
+    internal fun toTask() = Task(id, title, notes, completed)
 }
 
 @Dao
 interface TasksDao {
-    @Query("SELECT * FROM taskentity WHERE uid = :id")
-    suspend fun get(id: Int): TaskEntity
-
-    @Query("SELECT * FROM taskentity")
+    @Query("SELECT *, rowid FROM tasks")
     fun getAll(): Flow<List<TaskEntity>>
+
+    @Query("SELECT *, rowid FROM tasks WHERE title MATCH :query OR notes MATCH :query")
+    suspend fun search(query: String): List<TaskEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(task: TaskEntity)

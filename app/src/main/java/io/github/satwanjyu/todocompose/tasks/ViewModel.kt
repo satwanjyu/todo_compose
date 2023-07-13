@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -21,6 +22,8 @@ internal sealed class UiState {
 
     data class Tick(
         override val tasks: ImmutableList<Task>,
+        val query: String? = null,
+        val queriedTasks: ImmutableList<Task> = persistentListOf(),
     ) : UiState()
 
     data class Select(
@@ -50,20 +53,33 @@ internal class TasksViewModel : ViewModel() {
         initialValue = persistentListOf()
     )
 
+    private val queriedTasks = MutableStateFlow<ImmutableList<Task>>(persistentListOf())
+
     val uiState = MutableStateFlow<UiState>(UiState.Tick(tasks = persistentListOf()))
 
     init {
         viewModelScope.launch {
-            tasks.collect { tasks ->
+            combine(tasks, queriedTasks) { tasks, queriedTasks ->
+                tasks to queriedTasks
+            }.collect { pair ->
+                val tasks = pair.first
+                val queriedTasks = pair.second
                 uiState.update { uiState ->
                     when (uiState) {
-                        is UiState.Tick -> uiState.copy(tasks = tasks)
+                        is UiState.Tick -> uiState.copy(tasks = tasks, queriedTasks = queriedTasks)
                         is UiState.Select -> uiState.copy(tasks = tasks)
                         is UiState.Create -> uiState.copy(tasks = tasks)
                         is UiState.Edit -> uiState.copy(tasks = tasks)
                     }
                 }
             }
+        }
+    }
+
+    fun search(query: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val tasks = dao.search(query)
+            queriedTasks.value = tasks.map(TaskEntity::toTask).toImmutableList()
         }
     }
 

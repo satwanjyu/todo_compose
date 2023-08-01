@@ -1,9 +1,19 @@
 pipeline {
-    agent { any { image 'cimg/android' } }
+    agent {
+        any {
+            image 'cimg/android'
+        }
+    }
     stages {
-        stage('build') {
+        stage('Build APK') {
             steps {
-                sh './gradlew --version'
+                sh 'chmod +x ./gradlew'
+                sh './gradlew assembleRelease'
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: '**/*.apk'
+                }
             }
         }
     }

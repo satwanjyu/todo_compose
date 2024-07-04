@@ -35,14 +35,14 @@ class MainActivity : ComponentActivity() {
                     .build()
         }
         setContent {
-            val navController = rememberNavController()
-            val windowSizeClass = calculateWindowSizeClass(this)
-
             TodoComposeTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
+                    val navController = rememberNavController()
+                    val windowSizeClass = calculateWindowSizeClass(this)
+
                     NavHost(navController, startDestination = "tasks") {
                         tasks(windowSizeClass.widthSizeClass)
                     }

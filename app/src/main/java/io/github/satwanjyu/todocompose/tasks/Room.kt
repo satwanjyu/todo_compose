@@ -28,7 +28,7 @@ interface TasksDao {
     @Query("SELECT *, rowid FROM tasks")
     fun getAll(): Flow<List<TaskEntity>>
 
-    @Query("SELECT *, rowid FROM tasks WHERE title MATCH :query OR notes MATCH :query")
+    @Query("SELECT *, rowid FROM tasks WHERE title LIKE :query OR notes LIKE :query")
     suspend fun search(query: String): List<TaskEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

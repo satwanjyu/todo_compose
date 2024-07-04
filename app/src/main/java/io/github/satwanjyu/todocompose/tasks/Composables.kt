@@ -32,8 +32,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -49,14 +49,17 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.PlainTooltipBox
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -66,7 +69,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -135,7 +137,7 @@ private fun TasksCompact(
             }
         },
         contentKey = { uiStateType(it) },
-        label = "crossfade"
+        label = "Cross-fade between task list modes"
     ) { state ->
         when (state) {
             is UiState.Tick, is UiState.Select -> TaskListScaffold(
@@ -433,9 +435,16 @@ private fun TaskListScaffold(
                 enter = slideIn { IntOffset(it.width / 2, it.height / 2) } + fadeIn(),
                 exit = slideOut { IntOffset(it.width / 2, it.height / 2) } + fadeOut(),
             ) {
-                PlainTooltipBox(tooltip = { Text(stringResource(R.string.new_task)) }) {
+                TooltipBox(
+                    positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                    tooltip = {
+                        PlainTooltip {
+                            Text(stringResource(R.string.new_task))
+                        }
+                    },
+                    state = rememberTooltipState()
+                ) {
                     FloatingActionButton(
-                        modifier = Modifier.tooltipAnchor(),
                         onClick = onNavigateToCreate,
                     ) {
                         Icon(
@@ -502,7 +511,7 @@ private fun TaskListScaffold(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TasksSearchBar(
     modifier: Modifier = Modifier,
@@ -525,17 +534,22 @@ private fun TasksSearchBar(
     }
     val leadingIcon = @Composable {
         if (query != null) {
-            PlainTooltipBox(
-                tooltip = { Text(stringResource(R.string.go_back)) }
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                tooltip = {
+                    PlainTooltip {
+                        Text(stringResource(R.string.go_back))
+                    }
+                },
+                state = rememberTooltipState()
             ) {
                 IconButton(
-                    modifier = Modifier.tooltipAnchor(),
                     onClick = {
                         onQueryChange(null)
                     }
                 ) {
                     Icon(
-                        Icons.Default.ArrowBack,
+                        Icons.AutoMirrored.Filled.ArrowBack,
                         stringResource(R.string.go_back)
                     )
                 }
@@ -550,9 +564,16 @@ private fun TasksSearchBar(
             enter = fadeIn(),
             exit = fadeOut()
         ) {
-            PlainTooltipBox(tooltip = { Text(stringResource(R.string.clear)) }) {
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                tooltip = {
+                    PlainTooltip {
+                        Text(stringResource(R.string.clear))
+                    }
+                },
+                state = rememberTooltipState()
+            ) {
                 IconButton(
-                    modifier = Modifier.tooltipAnchor(),
                     onClick = { onQueryChange("") }
                 ) {
                     Icon(
@@ -632,10 +653,16 @@ private fun TasksSelectAppBar(
             )
         },
         navigationIcon = {
-            PlainTooltipBox(
-                tooltip = { Text(stringResource(R.string.dismiss)) }) {
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                tooltip = {
+                    PlainTooltip {
+                        Text(stringResource(R.string.dismiss))
+                    }
+                },
+                state = rememberTooltipState()
+            ) {
                 IconButton(
-                    modifier = Modifier.tooltipAnchor(),
                     onClick = {
                         onSelectedTasksChange(emptySet())
                     }) {
@@ -644,11 +671,12 @@ private fun TasksSelectAppBar(
             }
         },
         actions = {
-            PlainTooltipBox(
-                tooltip = { Text(stringResource(R.string.remove_tasks)) }
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                tooltip = { Text(stringResource(R.string.remove_tasks)) },
+                state = rememberTooltipState()
             ) {
                 IconButton(
-                    modifier = Modifier.tooltipAnchor(),
                     onClick = {
                         onRemoveTasks(selectedTasks)
                     }) {
@@ -664,7 +692,7 @@ private fun TasksSelectAppBar(
 }
 
 private sealed interface TaskListMode {
-    object Tick : TaskListMode
+    data object Tick : TaskListMode
     data class Select(val selectedTasks: ImmutableSet<Task>) : TaskListMode
 }
 
@@ -812,9 +840,12 @@ private fun EditTaskScaffold(
         topBar = {
             TopAppBar(
                 navigationIcon = {
-                    PlainTooltipBox(tooltip = { Text(stringResource(R.string.dismiss)) }) {
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                        tooltip = { Text(stringResource(R.string.dismiss)) },
+                        state = rememberTooltipState()
+                    ) {
                         IconButton(
-                            modifier = Modifier.tooltipAnchor(),
                             onClick = onDismiss
                         ) {
                             Icon(
@@ -837,7 +868,11 @@ private fun EditTaskScaffold(
                     )
                 },
                 actions = {
-                    PlainTooltipBox(tooltip = { Text(stringResource(R.string.confirm)) }) {
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                        tooltip = { Text(stringResource(R.string.confirm)) },
+                        state = rememberTooltipState()
+                    ) {
                         IconButton(
                             onClick = {
                                 when (mode) {
@@ -1026,9 +1061,16 @@ private fun NavRailTwoPaneScaffold(
 
         Row(modifier = Modifier.padding(paddingValues)) {
             NavigationRail(header = {
-                PlainTooltipBox(tooltip = { Text(stringResource(R.string.new_task)) }) {
+                TooltipBox(
+                    positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                    tooltip = {
+                        PlainTooltip {
+                            Text(stringResource(R.string.new_task))
+                        }
+                    },
+                    state = rememberTooltipState()
+                ) {
                     FloatingActionButton(
-                        modifier = Modifier.tooltipAnchor(),
                         onClick = onNavigateToCreate,
                     ) {
                         Icon(
@@ -1208,7 +1250,11 @@ private fun EditTaskAppBar(
     TopAppBar(
         title = { Text(stringResource(R.string.new_task)) },
         navigationIcon = {
-            PlainTooltipBox(tooltip = { Text(stringResource(R.string.dismiss)) }) {
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                tooltip = { Text(stringResource(R.string.dismiss)) },
+                state = rememberTooltipState()
+            ) {
                 IconButton(onClick = onDismiss) {
                     Icon(
                         Icons.Default.Close,
@@ -1218,7 +1264,11 @@ private fun EditTaskAppBar(
             }
         },
         actions = {
-            PlainTooltipBox(tooltip = { Text(stringResource(R.string.confirm)) }) {
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                tooltip = { Text(stringResource(R.string.confirm)) },
+                state = rememberTooltipState()
+            ) {
                 IconButton(onClick = {
                     onTaskCreate()
                 }) {
@@ -1241,7 +1291,11 @@ private fun CreateTaskAppBar(
     TopAppBar(
         title = { Text(stringResource(R.string.edit_task)) },
         navigationIcon = {
-            PlainTooltipBox(tooltip = { Text(stringResource(R.string.dismiss)) }) {
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                tooltip = { Text(stringResource(R.string.dismiss)) },
+                state = rememberTooltipState()
+            ) {
                 IconButton(onClick = onDismiss) {
                     Icon(
                         Icons.Default.Close,
@@ -1251,7 +1305,11 @@ private fun CreateTaskAppBar(
             }
         },
         actions = {
-            PlainTooltipBox(tooltip = { Text(stringResource(R.string.confirm)) }) {
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                tooltip = { Text(stringResource(R.string.confirm)) },
+                state = rememberTooltipState()
+            ) {
                 IconButton(onClick = {
                     onEditTask()
                 }) {
@@ -1308,9 +1366,12 @@ private fun NavRailScaffold(
             }
 
             NavigationRail(header = {
-                PlainTooltipBox(tooltip = { Text(stringResource(R.string.new_task)) }) {
+                TooltipBox(
+                    positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                    tooltip = { Text(stringResource(R.string.new_task)) },
+                    state = rememberTooltipState()
+                ) {
                     FloatingActionButton(
-                        modifier = Modifier.tooltipAnchor(),
                         onClick = onNavigateToCreate,
                     ) {
                         Icon(

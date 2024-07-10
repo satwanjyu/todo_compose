@@ -16,6 +16,7 @@ nav = "2.7.7"
 room = "2.6.1"
 
 kotlinx-collections-immutable = "0.3.7"
+kotlinx-serializable-json = "1.6.3"
 
 junit = "4.13.2"
 
@@ -24,6 +25,7 @@ androidApplication = { id = "com.android.application", version.ref = "agp" }
 kotlinAndroid = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 parcelize = { id = "org.jetbrains.kotlin.plugin.parcelize", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 
 [libraries]
 # Android
@@ -42,8 +44,7 @@ ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 material3 = { group = "androidx.compose.material3", name = "material3" }
 material3-window-size = { module = "androidx.compose.material3:material3-window-size-class", version.ref = "material3-window-size" }
-# Override animation version
-compose-animation = { module = "androidx.compose.animation:animation", version = "1.6.8" }
+compose-animation = { module = "androidx.compose.animation:animation" }
 activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activity-compose" }
 navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "nav" }
 lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle-runtime-ktx" }
@@ -54,8 +55,10 @@ room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 
-# Kotlin
+# KTX
 ktx-immutable-collection = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable", version.ref = "kotlinx-collections-immutable" }
+ktx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinx-serializable-json" }
 
 # JUnit
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+

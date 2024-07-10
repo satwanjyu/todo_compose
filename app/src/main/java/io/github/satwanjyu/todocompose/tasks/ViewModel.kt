@@ -1,8 +1,15 @@
 package io.github.satwanjyu.todocompose.tasks
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.satwanjyu.todocompose.db
+import io.github.satwanjyu.todocompose.tasks.data.Task
+import io.github.satwanjyu.todocompose.tasks.data.TaskEntity
+import io.github.satwanjyu.todocompose.tasks.data.TasksDao
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
@@ -11,41 +18,31 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 internal sealed class UiState {
-    abstract val tasks: ImmutableList<Task>
-
     data class Tick(
-        override val tasks: ImmutableList<Task>,
-        val query: String? = null,
+        val tasks: ImmutableList<Task>,
         val queriedTasks: ImmutableList<Task> = persistentListOf(),
     ) : UiState()
 
     data class Select(
-        override val tasks: ImmutableList<Task>,
+        val tasks: ImmutableList<Task>,
         val selectedTasks: ImmutableSet<Task>,
     ) : UiState()
 
-    data class Edit(
-        override val tasks: ImmutableList<Task>,
-        val task: Task,
-    ) : UiState()
+    data class Edit(val task: Task) : UiState()
 
-    data class Create(
-        override val tasks: ImmutableList<Task>,
-        val title: String,
-        val notes: String,
-    ) : UiState()
+    data object Create : UiState()
 }
 
 internal class TasksViewModel : ViewModel() {
+    val uiState = MutableStateFlow<UiState>(UiState.Tick(tasks = persistentListOf()))
+
     private val dao: TasksDao = db!!.tasksDao()
-    private val tasks: StateFlow<ImmutableList<Task>> = dao.getAll().map { list ->
+    val tasks: StateFlow<ImmutableList<Task>> = dao.getAll().map { list ->
         list.map(TaskEntity::toTask).toImmutableList()
     }.stateIn(
         scope = viewModelScope,
@@ -53,40 +50,9 @@ internal class TasksViewModel : ViewModel() {
         initialValue = persistentListOf()
     )
 
-    private val queriedTasks = MutableStateFlow<ImmutableList<Task>>(persistentListOf())
+    var searchText by mutableStateOf("")
 
-    val uiState = MutableStateFlow<UiState>(UiState.Tick(tasks = persistentListOf()))
-
-    init {
-        viewModelScope.launch {
-            combine(tasks, queriedTasks) { tasks, queriedTasks ->
-                tasks to queriedTasks
-            }.collect { pair ->
-                val tasks = pair.first
-                val queriedTasks = pair.second
-                uiState.update { uiState ->
-                    when (uiState) {
-                        is UiState.Tick -> uiState.copy(tasks = tasks, queriedTasks = queriedTasks)
-                        is UiState.Select -> uiState.copy(tasks = tasks)
-                        is UiState.Create -> uiState.copy(tasks = tasks)
-                        is UiState.Edit -> uiState.copy(tasks = tasks)
-                    }
-                }
-            }
-        }
-    }
-
-    fun search(query: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val tasks = dao.search(query)
-            queriedTasks.value = tasks.map(TaskEntity::toTask).toImmutableList()
-        }
-    }
-
-    fun insertTask(
-        title: String,
-        notes: String,
-    ) {
+    fun insertTask(title: String, notes: String) {
         val taskEntity = TaskEntity(0, title, notes, false)
         viewModelScope.launch(Dispatchers.IO) {
             dao.insert(taskEntity)

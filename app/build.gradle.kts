@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlinAndroid)
     alias(libs.plugins.ksp)
     alias(libs.plugins.parcelize)
+    alias(libs.plugins.serialization)
 }
 
 android {
@@ -52,7 +53,6 @@ android {
 }
 
 dependencies {
-
     // AndroidX
     implementation(libs.core.ktx)
     implementation(libs.lifecycle.runtime.ktx)
@@ -80,10 +80,10 @@ dependencies {
 
     // KTX
     implementation(libs.ktx.immutable.collection)
+    implementation(libs.ktx.serialization.json)
 
     // JUnit, Espresso
     testImplementation(libs.junit)
     androidTestImplementation(libs.test.ext.junit)
     androidTestImplementation(libs.espresso.core)
-
 }

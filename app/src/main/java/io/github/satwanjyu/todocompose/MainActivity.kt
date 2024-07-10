@@ -14,8 +14,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import io.github.satwanjyu.todocompose.tasks.TaskEntity
-import io.github.satwanjyu.todocompose.tasks.TasksDao
+import io.github.satwanjyu.todocompose.tasks.data.TaskEntity
+import io.github.satwanjyu.todocompose.tasks.data.TasksDao
 import io.github.satwanjyu.todocompose.tasks.tasks
 import io.github.satwanjyu.todocompose.ui.theme.TodoComposeTheme
 

@@ -1,4 +1,4 @@
-package io.github.satwanjyu.todocompose.tasks
+package io.github.satwanjyu.todocompose.tasks.data
 
 import androidx.room.ColumnInfo
 import androidx.room.Dao
@@ -9,7 +9,6 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
-import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Fts4(notIndexed = ["completed"])

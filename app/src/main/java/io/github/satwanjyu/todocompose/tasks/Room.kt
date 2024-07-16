@@ -1,4 +1,4 @@
-package io.github.satwanjyu.todocompose.tasks.data
+package io.github.satwanjyu.todocompose.tasks
 
 import androidx.room.ColumnInfo
 import androidx.room.Dao
@@ -27,6 +27,7 @@ interface TasksDao {
     @Query("SELECT *, rowid FROM tasks")
     fun getAll(): Flow<List<TaskEntity>>
 
+    // FIXME search doesn't work with title
     @Query("SELECT *, rowid FROM tasks WHERE title LIKE :query OR notes LIKE :query")
     suspend fun search(query: String): List<TaskEntity>
 

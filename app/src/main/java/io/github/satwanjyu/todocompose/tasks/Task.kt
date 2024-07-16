@@ -1,4 +1,4 @@
-package io.github.satwanjyu.todocompose.tasks.data
+package io.github.satwanjyu.todocompose.tasks
 
 internal data class Task(
     val id: Int,
